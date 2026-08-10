@@ -7,7 +7,6 @@ go = "1.26.5"
 [shell_alias]
 dev = "mise run dev"
 build = "mise run build"
-test = "mise run test"
 brun = "mise run build && ./image_reduce"
 
 [tasks.dev]

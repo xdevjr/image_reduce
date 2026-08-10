@@ -222,6 +222,62 @@
       .field input:focus {
         border-color: var(--accent);
       }
+      .pick-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .pick-row input {
+        flex: 1;
+        min-width: 0;
+      }
+      .pick-btn {
+        background: var(--bg-3);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .pick-btn:hover {
+        border-color: var(--accent);
+        background: #22304d;
+      }
+      .actions-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      .action-btn {
+        background: var(--bg-3);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .action-btn:hover {
+        border-color: var(--accent);
+        background: #22304d;
+      }
+      .action-btn.danger:hover {
+        border-color: var(--danger);
+        background: #3a1616;
+      }
+      .actions-bar .spacer {
+        flex: 1;
+      }
       .row-fields {
         display: flex;
         gap: 14px;
@@ -306,6 +362,18 @@
     </nav>
     <main>
       <section id="historyView">
+        <div class="actions-bar">
+          <button type="button" class="action-btn" id="openWatchDir">
+            📂 Abrir pasta monitorada
+          </button>
+          <button type="button" class="action-btn" id="openOutputDir">
+            📂 Abrir pasta de saída
+          </button>
+          <span class="spacer"></span>
+          <button type="button" class="action-btn danger" id="clearHistoryBtn">
+            🗑️ Limpar histórico
+          </button>
+        </div>
         <div id="historyList"><div class="empty">Carregando…</div></div>
         <pre
           id="debugLog"
@@ -322,22 +390,32 @@
         <form id="configForm">
           <div class="field">
             <label for="watchDir">Pasta monitorada</label>
-            <input
-              id="watchDir"
-              type="text"
-              placeholder="/caminho/para/pasta"
-            />
+            <div class="pick-row">
+              <input
+                id="watchDir"
+                type="text"
+                placeholder="/caminho/para/pasta"
+              />
+              <button type="button" class="pick-btn" data-target="watchDir">
+                Selecionar…
+              </button>
+            </div>
             <span class="hint"
               >Imagens novas aqui são convertidas automaticamente.</span
             >
           </div>
           <div class="field">
             <label for="outputDir">Pasta de saída</label>
-            <input
-              id="outputDir"
-              type="text"
-              placeholder="/caminho/para/saida"
-            />
+            <div class="pick-row">
+              <input
+                id="outputDir"
+                type="text"
+                placeholder="/caminho/para/saida"
+              />
+              <button type="button" class="pick-btn" data-target="outputDir">
+                Selecionar…
+              </button>
+            </div>
             <span class="hint"
               >Os arquivos .webp (e não-imagens) são movidos para cá.</span
             >
@@ -370,6 +448,7 @@
 
     <script>
       const events = new Map();
+      let currentConfig = null;
 
       function $(id) {
         return document.getElementById(id);
@@ -495,6 +574,7 @@
             .then(function (state) {
               clearTimeout(timeoutId);
               log("getState OK");
+              currentConfig = state.config;
               fillConfig(state.config);
               renderStatus(state.config);
               (state.history || []).forEach((e) => events.set(e.id, e));
@@ -549,6 +629,52 @@
           closeWindow();
         } catch (e) {
           log("closeWindow erro: " + e);
+        }
+      });
+
+      // Botões "Selecionar…" abrem o seletor de pasta nativo
+      document.querySelectorAll(".pick-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          try {
+            selectFolder().then(function (path) {
+              if (path) $(btn.dataset.target).value = path;
+            });
+          } catch (e) {
+            log("selectFolder erro: " + e);
+          }
+        });
+      });
+
+      // Botões "Abrir pasta…" abrem a pasta no gerenciador de arquivos
+      function openFolder(path) {
+        if (!path) {
+          toast("Pasta não configurada.", true);
+          return;
+        }
+        try {
+          openFolderBinding(path).then(function (ok) {
+            if (!ok) toast("Não foi possível abrir a pasta.", true);
+          });
+        } catch (e) {
+          log("openFolder erro: " + e);
+        }
+      }
+
+      $("openWatchDir").addEventListener("click", function () {
+        openFolder(currentConfig && currentConfig.watch_dir);
+      });
+      $("openOutputDir").addEventListener("click", function () {
+        openFolder(currentConfig && currentConfig.output_dir);
+      });
+
+      $("clearHistoryBtn").addEventListener("click", function () {
+        try {
+          clearHistory();
+          events.clear();
+          renderHistory();
+          toast("Histórico limpo!");
+        } catch (e) {
+          log("clearHistory erro: " + e);
         }
       });
 

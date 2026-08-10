@@ -14,7 +14,11 @@ transparência/alpha) e move os arquivos convertidos para uma pasta de saída.
   (ou excluídos, conforme configuração).
 - ⚙️ Conversões concorrentes configuráveis (padrão: 8).
 - 🖥️ Janela de histórico/progresso e configurações, aberta pela bandeja.
-- 💾 Configuração persistida em `~/.config/image_reduce/config.json`.
+- � Na aba Configurações, botões **Selecionar…** abrem o seletor de pasta
+  nativo (**zenity** no GNOME ou **kdialog** no KDE) para escolher as pastas
+  monitorada e de saída.- 📂 Na aba Histórico, botões **Abrir pasta monitorada** e **Abrir pasta de
+  saída** abrem as pastas no gerenciador de arquivos (via `xdg-open`), e o
+  botão **Limpar histórico** apaga todos os eventos registrados.- �💾 Configuração persistida em `~/.config/image_reduce/config.json`.
 
 ## Dependências de sistema
 
@@ -30,6 +34,9 @@ sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libwebp-dev
   - **GNOME**: instale a extensão
     [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-and-kstatusnotifieritem-support/).
   - **KDE Plasma / XFCE / Cinnamon**: suporte nativo.
+- Para o seletor de pastas da janela de configurações:
+  - **GNOME**: `zenity` (`sudo apt install zenity`)
+  - **KDE**: `kdialog` (geralmente já instalado)
 - O GTK3 usa o backend **X11** (via XWayland) para abrir a janela, pois o
   webkit2gtk-4.1 apresenta erro de protocolo com alguns compositores Wayland.
 - A aceleração de hardware problemática (GBM/DMA-BUF) é desabilitada

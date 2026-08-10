@@ -144,6 +144,18 @@ func (u *UI) openWindow() {
 	if err := w.Bind("closeWindow", func() { w.Terminate() }); err != nil {
 		return
 	}
+	if err := w.Bind("selectFolder", func() string {
+		// zenity/kdialog rodam em processo separado, sem bloquear a main
+		// thread do GTK (evita o deadlock de gtk_dialog_run no Dispatch).
+		return selectFolder()
+	}); err != nil {
+		return
+	}
+	if err := w.Bind("openFolderBinding", func(path string) bool {
+		return openFolder(path)
+	}); err != nil {
+		return
+	}
 
 	done := make(chan struct{})
 	var wg sync.WaitGroup
