@@ -1,0 +1,23 @@
+# Tasks do projeto Image Reduce
+# Uso: mise run <task>  (ex.: mise run dev, mise run build)
+
+[tools]
+go = "1.26.5"
+
+[shell_alias]
+dev = "mise run dev"
+build = "mise run build"
+test = "mise run test"
+brun = "mise run build && ./image_reduce"
+
+[tasks.dev]
+description = "Roda o app em modo dev (go run)"
+run = "go run ."
+
+[tasks.build]
+description = "Compila o binário image_reduce"
+run = "go build -o image_reduce ."
+
+[tasks.test]
+description = "Roda os testes do projeto"
+run = "go test ./..."
