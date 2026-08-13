@@ -212,6 +212,16 @@ func (u *UI) openWindow(tab string) {
 	}); err != nil {
 		return
 	}
+	if err := w.Bind("openFileBinding", func(path string) bool {
+		return openFile(path)
+	}); err != nil {
+		return
+	}
+	if err := w.Bind("showInFolderBinding", func(path string) bool {
+		return showInFolder(path)
+	}); err != nil {
+		return
+	}
 
 	done := make(chan struct{})
 	var wg sync.WaitGroup

@@ -7,6 +7,7 @@ package ui
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -33,4 +34,37 @@ func openFolder(path string) bool {
 		return false
 	}
 	return exec.Command("xdg-open", path).Start() == nil
+}
+
+// openFile abre o arquivo no aplicativo padrão via xdg-open.
+// Retorna false se o caminho for inválido ou o comando falhar.
+func openFile(path string) bool {
+	if path == "" {
+		return false
+	}
+	return exec.Command("xdg-open", path).Start() == nil
+}
+
+// showInFolder abre o gerenciador de arquivos com o arquivo selecionado.
+// Tenta os gerenciadores mais comuns (GNOME, KDE, XFCE, LXQt); se nenhum
+// estiver disponível, abre apenas a pasta via xdg-open.
+func showInFolder(path string) bool {
+	if path == "" {
+		return false
+	}
+	dir := filepath.Dir(path)
+	for _, cand := range [][]string{
+		{"nautilus", "--select", path},
+		{"dolphin", "--select", path},
+		{"thunar", path},
+		{"pcmanfm", "--select", path},
+	} {
+		if _, err := exec.LookPath(cand[0]); err != nil {
+			continue
+		}
+		if exec.Command(cand[0], cand[1:]...).Start() == nil {
+			return true
+		}
+	}
+	return exec.Command("xdg-open", dir).Start() == nil
 }

@@ -23,6 +23,10 @@
         margin: 0;
         padding: 0;
       }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
       body {
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -43,7 +47,7 @@
         gap: 12px;
       }
       header h1 {
-        font-size: 16px;
+        font-size: 16px; /* impeccable-disable-line flat-type-hierarchy -- rampa compacta 11-16px intencional (Small-Type Instrument Rule) */
         font-weight: 700;
         letter-spacing: 0.3px;
       }
@@ -54,10 +58,20 @@
         font-size: 12px;
         color: var(--muted);
         flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      #statusLabel {
+        flex-shrink: 0;
+      }
+      #statusPath {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        text-align: right;
+        min-width: 0;
       }
       #closeBtn {
         background: transparent;
@@ -121,10 +135,11 @@
         color: var(--muted);
         text-align: center;
         padding: 60px 0;
-        font-size: 14px;
+        font-size: 13px;
       }
       .row {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
         background: var(--bg-2);
@@ -132,6 +147,7 @@
         border-radius: var(--radius);
         padding: 10px 14px;
         font-size: 13px;
+        font-variant-numeric: tabular-nums;
       }
       .badge {
         flex-shrink: 0;
@@ -148,7 +164,8 @@
       }
       .badge.converting {
         background: #22304d;
-        color: var(--accent);
+        /* #6ea0ff (5.09:1) passa em AA; var(--accent) #4f8cff (4.09:1) falha */
+        color: #6ea0ff;
       }
       .badge.done {
         background: #14331f;
@@ -177,10 +194,20 @@
         color: var(--danger);
         font-size: 12px;
       }
+      .delta {
+        font-weight: 600;
+      }
+      .delta.save {
+        color: var(--accent-2);
+      }
+      .delta.grow {
+        color: var(--danger);
+      }
       .time {
         color: var(--muted);
         font-size: 11px;
         flex-shrink: 0;
+        font-variant-numeric: tabular-nums;
       }
       .row.converting .file {
         color: var(--accent);
@@ -191,12 +218,88 @@
       .row.error .file {
         color: var(--danger);
       }
+      /* Ações por linha: abrir arquivo e revelar na pasta */
+      .row-actions {
+        display: inline-flex;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+      .row-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: var(--muted);
+        cursor: pointer;
+        transition:
+          color 0.15s,
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .row-action:hover {
+        color: var(--text);
+        border-color: var(--border);
+        background: var(--bg-3);
+      }
+      .row-action .icon {
+        width: 14px;
+        height: 14px;
+      }
+      /* Barra de progresso indeterminada (conversão em andamento) */
+      .progress {
+        flex-basis: 100%;
+        height: 3px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-3);
+        overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%;
+        width: 40%;
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+        animation: progress-indeterminate 1.2s ease-in-out infinite;
+      }
+      .row.queued .progress-bar {
+        background: var(--muted);
+        animation-duration: 2s;
+      }
+      /* Travel em pixels (não %) = indicador de progresso, não marquee */
+      @keyframes progress-indeterminate {
+        0% {
+          transform: translateX(-320px);
+        }
+        100% {
+          transform: translateX(720px);
+        }
+      }
 
       form {
         max-width: 520px;
         display: flex;
         flex-direction: column;
+        gap: 16px;
+      }
+      fieldset {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
         gap: 14px;
+      }
+      legend {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding: 0 6px;
       }
       .field {
         display: flex;
@@ -221,6 +324,10 @@
       }
       .field input:focus {
         border-color: var(--accent);
+      }
+      .field input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
       }
       .pick-row {
         display: flex;
@@ -255,6 +362,9 @@
         flex-wrap: wrap;
       }
       .action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         background: var(--bg-3);
         border: 1px solid var(--border);
         color: var(--text);
@@ -265,22 +375,63 @@
         white-space: nowrap;
         transition:
           border-color 0.15s,
-          background 0.15s;
+          background 0.15s,
+          color 0.15s;
+      }
+      .action-btn .icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
       }
       .action-btn:hover {
         border-color: var(--accent);
         background: #22304d;
       }
+      /* Ação destrutiva sempre visível, não apenas no hover */
+      .action-btn.danger {
+        border-color: #5c2a2a;
+        color: var(--danger);
+      }
       .action-btn.danger:hover {
         border-color: var(--danger);
         background: #3a1616;
       }
+      /* Estado pausado = ação primária (retomar) */
       .action-btn.paused {
-        border-color: var(--warn);
-        color: var(--warn);
+        border-color: var(--accent);
+        color: var(--accent);
+        background: #22304d;
+      }
+      .action-btn.paused:hover {
+        background: #2a3d63; /* impeccable-disable-line design-system-color -- hover tint do botão primário pausado */
       }
       .actions-bar .spacer {
         flex: 1;
+      }
+      .stats-bar {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .stat strong {
+        color: var(--text);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      @keyframes row-in {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .row.new {
+        animation: row-in 0.25s ease-out;
       }
       .row-fields {
         display: flex;
@@ -305,11 +456,11 @@
       }
       button[type="submit"] {
         background: var(--accent);
-        color: #fff;
+        color: #fff; /* impeccable-disable-line design-system-color -- texto branco sobre botão primário */
         border: none;
         border-radius: 8px;
         padding: 11px;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         transition: filter 0.15s;
@@ -348,141 +499,343 @@
         border-color: var(--danger);
         color: var(--danger);
       }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      .field-error {
+        font-size: 11px;
+        color: var(--danger);
+      }
+      .pick-btn:disabled,
+      button[type="submit"]:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(
+          0,
+          0,
+          0,
+          0.55
+        ); /* impeccable-disable-line design-system-color -- scrim do modal */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+      }
+      .modal[hidden] {
+        display: none;
+      }
+      .modal-box {
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+        max-width: 380px;
+        width: 90%;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .modal-box h2 {
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .modal-box p {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
-    <noscript style="color: #fff; padding: 20px"
+    <noscript
+      style="
+        color: #fff; /* impeccable-disable-line design-system-color -- texto branco no aviso de noscript */
+        padding: 20px;
+      "
       >JavaScript está desabilitado. O app precisa de JavaScript para
       funcionar.</noscript
     >
     <header>
       <h1>Image <span>Reduce</span></h1>
-      <div id="status"></div>
-      <button id="closeBtn" type="button">X</button>
+      <div id="status" role="status" aria-live="polite">
+        <span id="statusLabel"></span>
+        <span id="statusPath"></span>
+      </div>
+      <button id="closeBtn" type="button" aria-label="Fechar janela">X</button>
     </header>
-    <nav>
-      <button id="tabHistory" class="active">Histórico</button>
-      <button id="tabConfig">Configurações</button>
+    <nav role="tablist" aria-label="Seções">
+      <button
+        id="tabHistory"
+        class="active"
+        role="tab"
+        aria-selected="true"
+        aria-controls="historyView"
+      >
+        Histórico
+      </button>
+      <button
+        id="tabConfig"
+        role="tab"
+        aria-selected="false"
+        aria-controls="configView"
+      >
+        Configurações
+      </button>
     </nav>
     <main>
-      <section id="historyView">
+      <section
+        id="historyView"
+        role="tabpanel"
+        aria-labelledby="tabHistory"
+        tabindex="0"
+      >
         <div class="actions-bar">
           <button type="button" class="action-btn" id="openWatchDir">
-            📂 Abrir pasta monitorada
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+            </svg>
+            Abrir pasta monitorada
           </button>
           <button type="button" class="action-btn" id="openOutputDir">
-            📂 Abrir pasta de saída
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+            </svg>
+            Abrir pasta de saída
           </button>
           <span class="spacer"></span>
           <button type="button" class="action-btn" id="toggleWatcherBtn">
-            ⏸ Pausar monitoramento
+            <svg
+              class="icon"
+              id="watcherIcon"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <rect x="6" y="4" width="4" height="16" rx="1" />
+              <rect x="14" y="4" width="4" height="16" rx="1" />
+            </svg>
+            <span id="watcherLabel">Pausar monitoramento</span>
           </button>
           <button type="button" class="action-btn danger" id="clearHistoryBtn">
-            🗑️ Limpar histórico
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <line x1="10" x2="10" y1="11" y2="17" />
+              <line x1="14" x2="14" y1="11" y2="17" />
+            </svg>
+            Limpar histórico
           </button>
         </div>
+        <div class="stats-bar">
+          <span id="statSavings" class="stat"></span>
+          <span id="statQueue" class="stat"></span>
+        </div>
         <div id="historyList"><div class="empty">Carregando…</div></div>
-        <pre
-          id="debugLog"
-          style="
-            color: #888;
-            font-size: 10px;
-            margin-top: 12px;
-            max-height: 120px;
-            overflow: auto;
-          "
-        ></pre>
+        <div
+          id="historyLive"
+          class="sr-only"
+          role="status"
+          aria-live="polite"
+        ></div>
       </section>
-      <section id="configView" style="display: none">
+      <section
+        id="configView"
+        style="display: none"
+        role="tabpanel"
+        aria-labelledby="tabConfig"
+        tabindex="0"
+      >
         <form id="configForm">
-          <div class="field">
-            <label for="watchDir">Pasta monitorada</label>
-            <div class="pick-row">
-              <input
-                id="watchDir"
-                type="text"
-                placeholder="/caminho/para/pasta"
-              />
-              <button type="button" class="pick-btn" data-target="watchDir">
-                Selecionar…
-              </button>
-            </div>
-            <span class="hint"
-              >Imagens novas aqui são convertidas automaticamente.</span
-            >
-          </div>
-          <div class="field">
-            <label for="outputDir">Pasta de saída</label>
-            <div class="pick-row">
-              <input
-                id="outputDir"
-                type="text"
-                placeholder="/caminho/para/saida"
-              />
-              <button type="button" class="pick-btn" data-target="outputDir">
-                Selecionar…
-              </button>
-            </div>
-            <span class="hint"
-              >Os arquivos .webp (e não-imagens) são copiados para cá.</span
-            >
-          </div>
-          <div class="field">
-            <label for="ignorePatterns">Ignorar arquivos (padrões)</label>
-            <input
-              id="ignorePatterns"
-              type="text"
-              placeholder=".*, *.rar, foto.png"
-            />
-            <span class="hint"
-              >Padrões separados por vírgula (ex.: *.rar ou o nome completo do
-              arquivo). Por padrão, .* ignora arquivos ocultos.</span
-            >
-          </div>
-          <div class="row-fields">
+          <fieldset>
+            <legend>Pastas</legend>
             <div class="field">
-              <label for="maxConcurrent">Conversões simultâneas</label>
-              <input
-                id="maxConcurrent"
-                type="number"
-                min="1"
-                max="64"
-                step="1"
-              />
-            </div>
-            <div class="field">
-              <label for="quality">Qualidade WebP (0–100)</label>
-              <input id="quality" type="number" min="1" max="100" step="1" />
-            </div>
-          </div>
-          <label class="checkbox">
-            <input id="videoEnabled" type="checkbox" />
-            Converter vídeos para WebM (AV1 + Opus)
-          </label>
-          <div class="row-fields">
-            <div class="field">
-              <label for="videoCrf"
-                >Qualidade de vídeo (CRF, menor = melhor)</label
+              <label for="watchDir">Pasta monitorada</label>
+              <div class="pick-row">
+                <input
+                  id="watchDir"
+                  type="text"
+                  placeholder="/caminho/para/pasta"
+                />
+                <button type="button" class="pick-btn" data-target="watchDir">
+                  Selecionar…
+                </button>
+              </div>
+              <span class="hint"
+                >Arquivos novos aqui são convertidos automaticamente.</span
               >
-              <input id="videoCrf" type="number" min="1" max="63" step="1" />
             </div>
             <div class="field">
-              <label for="videoPreset">Velocidade AV1 (0–13)</label>
-              <input id="videoPreset" type="number" min="0" max="13" step="1" />
+              <label for="outputDir">Pasta de saída</label>
+              <div class="pick-row">
+                <input
+                  id="outputDir"
+                  type="text"
+                  placeholder="/caminho/para/saida"
+                />
+                <button type="button" class="pick-btn" data-target="outputDir">
+                  Selecionar…
+                </button>
+              </div>
+              <span class="hint"
+                >Os arquivos .webp e os demais arquivos são movidos para
+                cá.</span
+              >
             </div>
-          </div>
-          <span class="hint"
-            >Requer ffmpeg com encoder AV1 (libsvtav1 ou libaom-av1). Vídeos já
-            em WebM são recompactados apenas se ficarem menores.</span
-          >
-          <label class="checkbox">
-            <input id="deleteOriginal" type="checkbox" />
-            Apagar o arquivo original após a conversão
-          </label>
+          </fieldset>
+          <fieldset>
+            <legend>Conversão</legend>
+            <div class="field">
+              <label for="ignorePatterns">Ignorar arquivos (padrões)</label>
+              <input
+                id="ignorePatterns"
+                type="text"
+                placeholder=".*, *.rar, foto.png"
+              />
+              <span class="hint"
+                >Padrões separados por vírgula (ex.: *.rar ou o nome completo do
+                arquivo). Por padrão, .* ignora arquivos ocultos.</span
+              >
+            </div>
+            <div class="row-fields">
+              <div class="field">
+                <label for="maxConcurrent">Conversões simultâneas</label>
+                <input
+                  id="maxConcurrent"
+                  type="number"
+                  min="1"
+                  max="64"
+                  step="1"
+                />
+              </div>
+              <div class="field">
+                <label for="quality">Qualidade WebP (1–100)</label>
+                <input id="quality" type="number" min="1" max="100" step="1" />
+              </div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Vídeo</legend>
+            <label class="checkbox">
+              <input id="videoEnabled" type="checkbox" />
+              Converter vídeos para WebM (AV1 + Opus)
+            </label>
+            <div class="row-fields">
+              <div class="field">
+                <label for="videoCrf"
+                  >Qualidade de vídeo (CRF, menor = melhor)</label
+                >
+                <input id="videoCrf" type="number" min="1" max="63" step="1" />
+              </div>
+              <div class="field">
+                <label for="videoPreset">Velocidade AV1 (0–13)</label>
+                <input
+                  id="videoPreset"
+                  type="number"
+                  min="0"
+                  max="13"
+                  step="1"
+                />
+              </div>
+            </div>
+            <span class="hint"
+              >Requer ffmpeg com encoder AV1 (libsvtav1 ou libaom-av1). Vídeos
+              já em WebM são recompactados apenas se ficarem menores.</span
+            >
+          </fieldset>
+          <fieldset>
+            <legend>Riscos</legend>
+            <label class="checkbox">
+              <input id="deleteOriginal" type="checkbox" />
+              Apagar o arquivo original após a conversão
+            </label>
+            <span class="hint"
+              >Os originais serão apagados após a conversão. Essa ação não pode
+              ser desfeita.</span
+            >
+          </fieldset>
           <button type="submit">Salvar configurações</button>
         </form>
       </section>
     </main>
+    <div id="confirmModal" class="modal" hidden>
+      <div
+        class="modal-box"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmTitle"
+      >
+        <h2 id="confirmTitle"></h2>
+        <p id="confirmMsg"></p>
+        <div class="modal-actions">
+          <button type="button" id="confirmCancel" class="action-btn">
+            Cancelar
+          </button>
+          <button type="button" id="confirmOk" class="action-btn danger">
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
     <div id="toast"></div>
 
     <script>
@@ -526,41 +879,140 @@
         );
       }
 
+      const seenIds = new Set();
+      let initialRender = true;
+
+      function computeStats() {
+        let saved = 0;
+        let processing = 0;
+        for (const e of events.values()) {
+          if (e.status === "done" && e.size_in > 0 && e.size_out > 0) {
+            saved += e.size_in - e.size_out;
+          }
+          if (e.status === "converting" || e.status === "queued") {
+            processing++;
+          }
+        }
+        return { saved, processing };
+      }
+
+      function renderStats() {
+        const { saved, processing } = computeStats();
+        $("statSavings").innerHTML =
+          "Economizado: <strong>" + fmtSize(saved) + "</strong>";
+        $("statQueue").innerHTML =
+          processing > 0
+            ? "Em processamento: <strong>" + processing + "</strong>"
+            : "";
+      }
+
+      // Ícones das ações por linha (abrir arquivo / revelar na pasta)
+      const ICON_OPEN =
+        '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>';
+      const ICON_SHOW =
+        '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>';
+
       function renderHistory() {
         const list = [...events.values()].reverse();
         const el = $("historyList");
         if (list.length === 0) {
           el.innerHTML =
             '<div class="empty">Nenhuma conversão ainda.<br>Adicione imagens na pasta monitorada.</div>';
+          renderStats();
           return;
         }
         el.innerHTML = list
           .map((e) => {
-            const size =
-              e.size_out > 0 && e.size_in > 0
-                ? ` <span class="muted">${fmtSize(e.size_in)} → ${fmtSize(e.size_out)} (${pct(e.size_in, e.size_out)})</span>`
-                : "";
+            const isNew = !initialRender && !seenIds.has(e.id);
+            seenIds.add(e.id);
+            const delta =
+              e.size_out > 0 && e.size_in > 0 ? pct(e.size_in, e.size_out) : "";
+            const size = delta
+              ? ` <span class="muted">${fmtSize(e.size_in)} → ${fmtSize(e.size_out)} <span class="delta ${delta.startsWith("-") ? "save" : "grow"}">${delta}</span></span>`
+              : "";
             const reason = e.reason
               ? ` <span class="muted">(${escapeHtml(e.reason)})</span>`
               : "";
             const err = e.error
               ? ` <span class="err">${escapeHtml(e.error)}</span>`
               : "";
-            const time = new Date(e.timestamp).toLocaleTimeString("pt-BR");
+            const ts = new Date(e.timestamp);
+            const now = new Date();
+            const sameDay =
+              ts.getFullYear() === now.getFullYear() &&
+              ts.getMonth() === now.getMonth() &&
+              ts.getDate() === now.getDate();
+            const time = sameDay
+              ? ts.toLocaleTimeString("pt-BR")
+              : ts.toLocaleDateString("pt-BR") +
+                " " +
+                ts.toLocaleTimeString("pt-BR");
             const dur = e.duration ? " · " + e.duration : "";
-            return `<div class="row ${e.status}">
+            // Arquivo alvo das ações: resultado convertido (done) ou original
+            // (erro). Em "skipped" o original foi movido/apagado, então não
+            // há botões. Em erro com output (falha ao tratar original), o
+            // convertido ainda existe e é o alvo mais útil.
+            const target =
+              e.status === "done" && e.output
+                ? e.output
+                : e.status === "error"
+                  ? e.output || e.source
+                  : "";
+            const actions = target
+              ? `<span class="row-actions">
+        <button type="button" class="row-action" data-act="open" data-path="${escapeHtml(target)}" title="Abrir arquivo" aria-label="Abrir arquivo">${ICON_OPEN}</button>
+        <button type="button" class="row-action" data-act="show" data-path="${escapeHtml(target)}" title="Mostrar na pasta" aria-label="Mostrar na pasta">${ICON_SHOW}</button>
+      </span>`
+              : "";
+            const progress =
+              e.status === "converting" || e.status === "queued"
+                ? '<div class="progress"><div class="progress-bar"></div></div>'
+                : "";
+            return `<div class="row ${e.status}${isNew ? " new" : ""}">
         <span class="badge ${e.status}">${e.status}</span>
         <span class="file">${escapeHtml(e.file)}</span>
         ${size}${reason}${err}
         <span class="time">${time}${dur}</span>
+        ${actions}
+        ${progress}
       </div>`;
           })
           .join("");
+        renderStats();
+      }
+
+      function announceEvent(ev) {
+        const label =
+          {
+            queued: "na fila",
+            converting: "convertendo",
+            done: "concluído",
+            skipped: "ignorado",
+            error: "erro",
+          }[ev.status] || ev.status;
+        const live = $("historyLive");
+        if (live) live.textContent = ev.file + ": " + label;
+      }
+
+      let pendingEvent = null;
+      let renderScheduled = false;
+      function scheduleRender() {
+        if (renderScheduled) return;
+        renderScheduled = true;
+        requestAnimationFrame(function () {
+          renderScheduled = false;
+          if (pendingEvent) {
+            announceEvent(pendingEvent);
+            pendingEvent = null;
+          }
+          renderHistory();
+        });
       }
 
       function pushEvent(ev) {
         events.set(ev.id, ev);
-        renderHistory();
+        pendingEvent = ev;
+        scheduleRender();
       }
 
       function fillConfig(cfg) {
@@ -577,15 +1029,31 @@
 
       function renderStatus(cfg) {
         cfg = cfg || {};
-        $("status").textContent =
-          (watching ? "Monitorando: " : "Pausado: ") + (cfg.watch_dir || "");
+        $("statusLabel").textContent = watching ? "Monitorando:" : "Pausado:";
+        $("statusPath").textContent = tailPath(cfg.watch_dir || "", 48);
+      }
+
+      // Mostra o fim do caminho (nome da pasta) quando ele é longo demais
+      function tailPath(path, maxLen) {
+        if (path.length <= maxLen) return path;
+        const parts = path.split("/");
+        let tail = "";
+        for (let i = parts.length - 1; i >= 0; i--) {
+          const next = tail ? parts[i] + "/" + tail : parts[i];
+          if (next.length > maxLen - 3) break;
+          tail = next;
+        }
+        return "…/" + tail;
       }
 
       function updateWatcherBtn() {
         const btn = $("toggleWatcherBtn");
-        btn.textContent = watching
-          ? "⏸ Pausar monitoramento"
-          : "▶ Retomar monitoramento";
+        $("watcherLabel").textContent = watching
+          ? "Pausar monitoramento"
+          : "Retomar monitoramento";
+        $("watcherIcon").innerHTML = watching
+          ? '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>'
+          : '<path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14Z"/>';
         btn.classList.toggle("paused", !watching);
       }
 
@@ -598,36 +1066,103 @@
         toastTimer = setTimeout(() => (t.className = ""), 2600);
       }
 
+      // --- Confirmação em página (evita window.confirm no webview) ---
+      let confirmResolve = null;
+      function confirmDialog(title, msg, okLabel) {
+        $("confirmTitle").textContent = title;
+        $("confirmMsg").textContent = msg;
+        $("confirmOk").textContent = okLabel || "Confirmar";
+        $("confirmModal").hidden = false;
+        $("confirmOk").focus();
+        return new Promise(function (resolve) {
+          confirmResolve = resolve;
+        });
+      }
+      function closeConfirm(result) {
+        $("confirmModal").hidden = true;
+        if (confirmResolve) {
+          confirmResolve(result);
+          confirmResolve = null;
+        }
+      }
+      $("confirmOk").addEventListener("click", () => closeConfirm(true));
+      $("confirmCancel").addEventListener("click", () => closeConfirm(false));
+      $("confirmModal").addEventListener("click", function (ev) {
+        if (ev.target === this) closeConfirm(false);
+      });
+
+      // --- Estado "não salvo" do formulário ---
+      let formDirty = false;
+      function markDirty() {
+        formDirty = true;
+      }
+      function resetDirty() {
+        formDirty = false;
+      }
+      $("configForm").addEventListener("input", markDirty);
+      $("configForm").addEventListener("change", markDirty);
+
+      // --- Validação inline ---
+      function setFieldError(input, msg) {
+        const field = input.closest(".field");
+        if (!field) return;
+        let err = field.querySelector(".field-error");
+        if (!err) {
+          err = document.createElement("span");
+          err.className = "field-error";
+          field.appendChild(err);
+        }
+        err.textContent = msg;
+        input.setAttribute("aria-invalid", "true");
+      }
+      function clearFieldError(input) {
+        const field = input.closest(".field");
+        if (!field) return;
+        const err = field.querySelector(".field-error");
+        if (err) err.remove();
+        input.removeAttribute("aria-invalid");
+      }
+
       function switchTab(name) {
         const h = name === "history";
         $("historyView").style.display = h ? "block" : "none";
         $("configView").style.display = h ? "none" : "block";
         $("tabHistory").classList.toggle("active", h);
         $("tabConfig").classList.toggle("active", !h);
+        $("tabHistory").setAttribute("aria-selected", h ? "true" : "false");
+        $("tabConfig").setAttribute("aria-selected", h ? "false" : "true");
       }
 
-      function log(msg) {
-        const el = $("debugLog");
-        if (el) el.textContent += msg + "\n";
+      // Troca de aba com proteção contra alterações não salvas
+      async function requestTab(name) {
+        const h = name === "history";
+        const configVisible = $("configView").style.display !== "none";
+        if (h && configVisible && formDirty) {
+          const ok = await confirmDialog(
+            "Descartar alterações?",
+            "Há alterações não salvas nas configurações. Descartá-las?",
+            "Descartar",
+          );
+          if (!ok) return;
+          resetDirty();
+        }
+        switchTab(name);
       }
 
       function init() {
-        log("init() chamado");
         $("historyList").innerHTML =
           '<div class="empty">Carregando estado…</div>';
 
         // Fallback caso getState não responda em 3s
         const timeoutId = setTimeout(() => {
-          log("timeout de getState");
           $("historyList").innerHTML =
-            '<div class="empty">Tempo esgotado ao carregar estado.<br>Verifique os bindings Go/JS.</div>';
+            '<div class="empty">Não foi possível carregar o estado.<br>Tente abrir a janela novamente.</div>';
         }, 3000);
 
         try {
           getState()
             .then(function (state) {
               clearTimeout(timeoutId);
-              log("getState OK");
               currentConfig = state.config;
               watching = state.watching !== false;
               fillConfig(state.config);
@@ -638,10 +1173,10 @@
               }
               (state.history || []).forEach((e) => events.set(e.id, e));
               renderHistory();
+              initialRender = false;
             })
             .catch(function (e) {
               clearTimeout(timeoutId);
-              log("getState erro: " + e);
               $("historyList").innerHTML =
                 '<div class="empty">Erro ao carregar estado: ' +
                 escapeHtml(e) +
@@ -649,7 +1184,6 @@
             });
         } catch (e) {
           clearTimeout(timeoutId);
-          log("getState excecao: " + e);
           $("historyList").innerHTML =
             '<div class="empty">Exceção ao carregar estado: ' +
             escapeHtml(e) +
@@ -657,53 +1191,135 @@
         }
       }
 
-      $("tabHistory").addEventListener("click", () => switchTab("history"));
-      $("tabConfig").addEventListener("click", () => switchTab("config"));
+      $("tabHistory").addEventListener("click", () => requestTab("history"));
+      $("tabConfig").addEventListener("click", () => requestTab("config"));
+
+      // Navegação por teclado entre as abas (padrão WAI-ARIA tabs)
+      document
+        .querySelectorAll('[role="tab"]')
+        .forEach(function (tab, idx, tabs) {
+          tab.addEventListener("keydown", function (ev) {
+            let next = null;
+            if (ev.key === "ArrowRight") next = tabs[(idx + 1) % tabs.length];
+            else if (ev.key === "ArrowLeft")
+              next = tabs[(idx - 1 + tabs.length) % tabs.length];
+            else if (ev.key === "Home") next = tabs[0];
+            else if (ev.key === "End") next = tabs[tabs.length - 1];
+            if (next) {
+              ev.preventDefault();
+              next.click();
+              next.focus();
+            }
+          });
+        });
+
+      const saveBtn = $("configForm").querySelector('button[type="submit"]');
+      function setSaving(saving) {
+        saveBtn.disabled = saving;
+        saveBtn.textContent = saving ? "Salvando…" : "Salvar configurações";
+      }
 
       $("configForm").addEventListener("submit", function (ev) {
         ev.preventDefault();
+        const watchDir = $("watchDir").value.trim();
+        const outputDir = $("outputDir").value.trim();
+        const maxConcurrent = parseInt($("maxConcurrent").value, 10);
+        const quality = parseFloat($("quality").value);
+        const videoCrf = parseFloat($("videoCrf").value);
+        const videoPreset = parseInt($("videoPreset").value, 10);
+
+        let valid = true;
+        if (!watchDir) {
+          setFieldError($("watchDir"), "Informe a pasta monitorada.");
+          valid = false;
+        } else clearFieldError($("watchDir"));
+        if (!outputDir) {
+          setFieldError($("outputDir"), "Informe a pasta de saída.");
+          valid = false;
+        } else clearFieldError($("outputDir"));
+        if (!(maxConcurrent >= 1 && maxConcurrent <= 64)) {
+          setFieldError($("maxConcurrent"), "Use um valor entre 1 e 64.");
+          valid = false;
+        } else clearFieldError($("maxConcurrent"));
+        if (!(quality >= 1 && quality <= 100)) {
+          setFieldError($("quality"), "Use um valor entre 1 e 100.");
+          valid = false;
+        } else clearFieldError($("quality"));
+        if (!(videoCrf >= 1 && videoCrf <= 63)) {
+          setFieldError($("videoCrf"), "Use um valor entre 1 e 63.");
+          valid = false;
+        } else clearFieldError($("videoCrf"));
+        if (!(videoPreset >= 0 && videoPreset <= 13)) {
+          setFieldError($("videoPreset"), "Use um valor entre 0 e 13.");
+          valid = false;
+        } else clearFieldError($("videoPreset"));
+        if (!valid) {
+          toast("Corrija os campos destacados.", true);
+          return;
+        }
+
         const cfg = {
-          watch_dir: $("watchDir").value.trim(),
-          output_dir: $("outputDir").value.trim(),
-          max_concurrent: parseInt($("maxConcurrent").value, 10) || 8,
-          quality: parseFloat($("quality").value) || 90,
+          watch_dir: watchDir,
+          output_dir: outputDir,
+          max_concurrent: maxConcurrent,
+          quality: quality,
           delete_original: $("deleteOriginal").checked,
           ignore_patterns: $("ignorePatterns").value.trim(),
           video_enabled: $("videoEnabled").checked,
-          video_crf: parseFloat($("videoCrf").value) || 32,
-          video_preset: parseInt($("videoPreset").value, 10) || 6,
+          video_crf: videoCrf,
+          video_preset: videoPreset,
         };
+        setSaving(true);
         try {
           saveConfig(cfg)
             .then(function () {
+              resetDirty();
               toast("Configurações salvas!");
               renderStatus(cfg);
             })
             .catch(function (e) {
               toast("Erro ao salvar: " + e, true);
+            })
+            .finally(function () {
+              setSaving(false);
             });
         } catch (e) {
+          setSaving(false);
           toast("Erro ao salvar: " + e, true);
         }
       });
 
-      $("closeBtn").addEventListener("click", function () {
+      $("closeBtn").addEventListener("click", async function () {
+        if (formDirty) {
+          const ok = await confirmDialog(
+            "Fechar sem salvar?",
+            "Há alterações não salvas nas configurações. Fechar a janela mesmo assim?",
+            "Fechar",
+          );
+          if (!ok) return;
+        }
         try {
           closeWindow();
         } catch (e) {
-          log("closeWindow erro: " + e);
+          // janela já fechada ou binding indisponível
         }
       });
 
       // Botões "Selecionar…" abrem o seletor de pasta nativo
       document.querySelectorAll(".pick-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {
+          if (btn.disabled) return;
+          btn.disabled = true;
           try {
-            selectFolder().then(function (path) {
-              if (path) $(btn.dataset.target).value = path;
-            });
+            selectFolder()
+              .then(function (path) {
+                if (path) $(btn.dataset.target).value = path;
+              })
+              .finally(function () {
+                btn.disabled = false;
+              });
           } catch (e) {
-            log("selectFolder erro: " + e);
+            btn.disabled = false;
           }
         });
       });
@@ -719,9 +1335,43 @@
             if (!ok) toast("Não foi possível abrir a pasta.", true);
           });
         } catch (e) {
-          log("openFolder erro: " + e);
+          // binding indisponível
         }
       }
+
+      // Ações por linha do histórico: abrir arquivo ou revelar na pasta
+      function openFile(path) {
+        try {
+          openFileBinding(path).then(function (ok) {
+            if (!ok) toast("Não foi possível abrir o arquivo.", true);
+          });
+        } catch (e) {
+          // binding indisponível
+        }
+      }
+      function showInFolder(path) {
+        try {
+          showInFolderBinding(path).then(function (ok) {
+            if (!ok) toast("Não foi possível abrir a pasta.", true);
+          });
+        } catch (e) {
+          // binding indisponível
+        }
+      }
+      $("historyList").addEventListener("click", function (ev) {
+        const btn = ev.target.closest(".row-action");
+        if (!btn) return;
+        const path = btn.dataset.path;
+        if (!path) {
+          toast("Arquivo não encontrado.", true);
+          return;
+        }
+        if (btn.dataset.act === "open") {
+          openFile(path);
+        } else {
+          showInFolder(path);
+        }
+      });
 
       $("openWatchDir").addEventListener("click", function () {
         openFolder(currentConfig && currentConfig.watch_dir);
@@ -730,14 +1380,21 @@
         openFolder(currentConfig && currentConfig.output_dir);
       });
 
-      $("clearHistoryBtn").addEventListener("click", function () {
+      $("clearHistoryBtn").addEventListener("click", async function () {
+        const ok = await confirmDialog(
+          "Limpar histórico?",
+          "Todos os registros de conversão serão removidos. Essa ação não pode ser desfeita.",
+          "Limpar",
+        );
+        if (!ok) return;
         try {
           clearHistory();
           events.clear();
+          seenIds.clear();
           renderHistory();
           toast("Histórico limpo!");
         } catch (e) {
-          log("clearHistory erro: " + e);
+          // binding indisponível
         }
       });
 
@@ -753,14 +1410,13 @@
             );
           });
         } catch (e) {
-          log("setWatcherPaused erro: " + e);
+          // binding indisponível
         }
       });
 
       // Expor pushEvent globalmente para o Go
       window.pushEvent = pushEvent;
 
-      log("script carregado");
       init();
     </script>
   </body>
