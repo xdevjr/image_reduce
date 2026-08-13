@@ -55,6 +55,27 @@ func (a *App) Stop() {
 	a.queue.Close()
 }
 
+// WatcherPaused informa se o monitoramento está pausado.
+func (a *App) WatcherPaused() bool {
+	a.mu.Lock()
+	w := a.watcher
+	a.mu.Unlock()
+	if w == nil {
+		return false
+	}
+	return w.Paused()
+}
+
+// SetWatcherPaused pausa ou retoma o monitoramento manualmente.
+func (a *App) SetWatcherPaused(paused bool) {
+	a.mu.Lock()
+	w := a.watcher
+	a.mu.Unlock()
+	if w != nil {
+		w.SetPaused(paused)
+	}
+}
+
 // Events retorna o canal de eventos de progresso/histórico.
 func (a *App) Events() <-chan *history.Event { return a.events }
 

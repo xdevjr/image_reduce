@@ -22,6 +22,7 @@ import (
 
 	"image_reduce/internal/config"
 	"image_reduce/internal/history"
+	"image_reduce/internal/video"
 )
 
 // Snapshot é uma cópia imutável das opções usadas por uma conversão.
@@ -30,6 +31,9 @@ type Snapshot struct {
 	ProcessedDir   string
 	Quality        float64
 	DeleteOriginal bool
+	VideoEnabled   bool
+	VideoCRF       float64
+	VideoPreset    int
 }
 
 // Converter processa arquivos: converte imagens para WebP e trata originais.
@@ -62,6 +66,9 @@ func (c *Converter) SetConfig(cfg *config.Config) {
 		ProcessedDir:   cfg.ProcessedDir(),
 		Quality:        cfg.Quality,
 		DeleteOriginal: cfg.DeleteOriginal,
+		VideoEnabled:   cfg.VideoEnabled,
+		VideoCRF:       cfg.VideoCRF,
+		VideoPreset:    cfg.VideoPreset,
 	}
 }
 
@@ -84,6 +91,11 @@ func (c *Converter) Process(path string) {
 	c.emit(ev)
 	start := time.Now()
 	defer func() { ev.Duration = time.Since(start).Round(time.Millisecond).String() }()
+
+	if video.IsVideo(path) {
+		c.processVideo(ev, path, snap)
+		return
+	}
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -115,6 +127,21 @@ func (c *Converter) Process(path string) {
 		}
 		img = g.Image[0]
 	} else {
+		if format == "webp" {
+			animated, err := isAnimatedWebP(f)
+			if err != nil {
+				c.moveAsIs(ev, path, snap, "not an image")
+				return
+			}
+			if animated {
+				c.moveAsIs(ev, path, snap, "animated webp")
+				return
+			}
+			if _, err := f.Seek(0, io.SeekStart); err != nil {
+				c.fail(ev, err)
+				return
+			}
+		}
 		img, _, err = image.Decode(f)
 		if err != nil {
 			c.moveAsIs(ev, path, snap, "not an image")
@@ -125,6 +152,13 @@ func (c *Converter) Process(path string) {
 	var buf bytes.Buffer
 	if err := webp.Encode(&buf, img, &webp.Options{Quality: float32(snap.Quality)}); err != nil {
 		c.fail(ev, err)
+		return
+	}
+
+	// Se o arquivo já era WebP e a recompressão não reduziu o tamanho,
+	// mantém o original como está (já otimizado).
+	if format == "webp" && int64(buf.Len()) >= ev.SizeIn {
+		c.moveAsIs(ev, path, snap, "webp already optimized")
 		return
 	}
 
@@ -161,10 +195,66 @@ func (c *Converter) handleOriginal(src string, snap Snapshot) error {
 	return moveFile(src, dest)
 }
 
-// moveAsIs move um arquivo sem conversão para a pasta de saída.
+// processVideo converte um vídeo para WebM (AV1 + Opus) quando reduz o tamanho.
+func (c *Converter) processVideo(ev *history.Event, src string, snap Snapshot) {
+	if !snap.VideoEnabled {
+		c.moveAsIs(ev, src, snap, "video conversion disabled")
+		return
+	}
+	tmp, err := os.CreateTemp(snap.OutputDir, "video-*.webm")
+	if err != nil {
+		c.fail(ev, err)
+		return
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+
+	if err := video.Convert(src, tmpPath, snap.VideoCRF, snap.VideoPreset); err != nil {
+		os.Remove(tmpPath)
+		c.fail(ev, fmt.Errorf("falha na conversão de vídeo: %w", err))
+		return
+	}
+	info, err := os.Stat(tmpPath)
+	if err != nil || info.Size() == 0 {
+		os.Remove(tmpPath)
+		c.fail(ev, fmt.Errorf("conversão de vídeo produziu arquivo vazio"))
+		return
+	}
+	// Mantém o original se a recompressão não reduziu o tamanho.
+	if info.Size() >= ev.SizeIn {
+		os.Remove(tmpPath)
+		c.moveAsIs(ev, src, snap, "video already optimized")
+		return
+	}
+	outPath := uniquePath(filepath.Join(snap.OutputDir, stem(filepath.Base(src))+".webm"))
+	if err := moveFile(tmpPath, outPath); err != nil {
+		os.Remove(tmpPath)
+		c.fail(ev, err)
+		return
+	}
+	ev.Status = history.StatusDone
+	ev.Output = outPath
+	ev.SizeOut = info.Size()
+	c.emit(ev)
+
+	if err := c.handleOriginal(src, snap); err != nil {
+		errEv := &history.Event{
+			ID:        newID(),
+			File:      filepath.Base(src),
+			Source:    src,
+			Status:    history.StatusError,
+			Error:     "falha ao tratar original: " + err.Error(),
+			Timestamp: time.Now(),
+		}
+		c.emit(errEv)
+	}
+}
+
+// moveAsIs copia um arquivo sem conversão para a pasta de saída e trata o
+// original como nos arquivos convertidos (move para processed/ ou apaga).
 func (c *Converter) moveAsIs(ev *history.Event, src string, snap Snapshot, reason string) {
-	dest := filepath.Join(snap.OutputDir, filepath.Base(src))
-	if err := moveFile(src, dest); err != nil {
+	dest := uniquePath(filepath.Join(snap.OutputDir, filepath.Base(src)))
+	if err := copyFile(src, dest); err != nil {
 		c.fail(ev, err)
 		return
 	}
@@ -172,6 +262,18 @@ func (c *Converter) moveAsIs(ev *history.Event, src string, snap Snapshot, reaso
 	ev.Reason = reason
 	ev.Output = dest
 	c.emit(ev)
+
+	if err := c.handleOriginal(src, snap); err != nil {
+		errEv := &history.Event{
+			ID:        newID(),
+			File:      filepath.Base(src),
+			Source:    src,
+			Status:    history.StatusError,
+			Error:     "falha ao tratar original: " + err.Error(),
+			Timestamp: time.Now(),
+		}
+		c.emit(errEv)
+	}
 }
 
 func (c *Converter) emit(ev *history.Event) {
@@ -210,21 +312,44 @@ func detectFormat(r io.Reader) (string, error) {
 	case len(head) >= 4 && ((head[0] == 'I' && head[1] == 'I' && head[2] == 0x2A && head[3] == 0x00) ||
 		(head[0] == 'M' && head[1] == 'M' && head[2] == 0x00 && head[3] == 0x2A)):
 		return "tiff", nil
+	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
+		return "webp", nil
 	}
 	return "", fmt.Errorf("formato desconhecido")
 }
 
-// writeUnique escreve data em path, adicionando sufixo numérico se já existir.
-func writeUnique(path string, data []byte) (string, error) {
+// isAnimatedWebP verifica o bit de animação no chunk VP8X do cabeçalho WebP.
+func isAnimatedWebP(r io.Reader) (bool, error) {
+	head := make([]byte, 21)
+	n, err := io.ReadFull(r, head)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return false, err
+	}
+	head = head[:n]
+	// Cabeçalho RIFF (12 bytes) + fourcc "VP8X" (4) + tamanho do chunk (4)
+	// + primeiro byte do payload (flags), onde o bit 0x04 indica animação.
+	if len(head) < 21 || string(head[12:16]) != "VP8X" {
+		return false, nil
+	}
+	return head[20]&0x04 != 0, nil
+}
+
+// uniquePath retorna um caminho livre, com sufixo numérico se necessário.
+func uniquePath(path string) string {
 	p := path
 	ext := filepath.Ext(p)
-	stem := strings.TrimSuffix(p, ext)
+	base := strings.TrimSuffix(p, ext)
 	for i := 1; ; i++ {
 		if _, err := os.Stat(p); os.IsNotExist(err) {
-			break
+			return p
 		}
-		p = fmt.Sprintf("%s-%d%s", stem, i, ext)
+		p = fmt.Sprintf("%s-%d%s", base, i, ext)
 	}
+}
+
+// writeUnique escreve data em path, adicionando sufixo numérico se já existir.
+func writeUnique(path string, data []byte) (string, error) {
+	p := uniquePath(path)
 	if err := os.WriteFile(p, data, 0o644); err != nil {
 		return "", err
 	}

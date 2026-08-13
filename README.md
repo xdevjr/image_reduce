@@ -7,13 +7,21 @@ transparência/alpha) e move os arquivos convertidos para uma pasta de saída.
 ## Funcionalidades
 
 - 🖼️ Monitora uma pasta de entrada e converte imagens (PNG, JPEG, GIF estático,
-  BMP, TIFF) para WebP com qualidade 90 (lossy), preservando o canal alpha.
-- 🎞️ GIFs animados e arquivos não-imagem são **movidos sem conversão** para a
-  pasta de saída.
+  BMP, TIFF e **WebP**) para WebP com qualidade 90 (lossy), preservando o canal
+  alpha. Arquivos que já são WebP são recompactados quando isso reduz o tamanho.
+- 🚫 Padrões de arquivos ignorados (ex.: `*.rar`, nome do arquivo), separados
+  por vírgula — por padrão, `.*` ignora arquivos ocultos.
+- 🎞️ GIFs animados, WebPs animados e arquivos não-imagem são **copiados sem
+  conversão** para a pasta de saída; os originais também vão para `processed/`.
+- 🎬 Vídeos (MP4, MKV, MOV, AVI, WebM, etc.) são convertidos para **WebM
+  (AV1 + Opus)** via ffmpeg (SVT-AV1, com fallback para libaom-av1), apenas
+  quando o resultado fica menor que o original.
 - 📁 Os originais são movidos para `processed/` dentro da pasta monitorada
   (ou excluídos, conforme configuração).
 - ⚙️ Conversões concorrentes configuráveis (padrão: 8).
 - 🖥️ Janela de histórico/progresso e configurações, aberta pela bandeja.
+- ⏯️ Botão para **pausar/retomar o monitoramento** manualmente (aba Histórico).
+  Ao retomar, arquivos que chegaram durante a pausa são processados.
 - � Na aba Configurações, botões **Selecionar…** abrem o seletor de pasta
   nativo (**zenity** no GNOME ou **kdialog** no KDE) para escolher as pastas
   monitorada e de saída.- 📂 Na aba Histórico, botões **Abrir pasta monitorada** e **Abrir pasta de
@@ -25,7 +33,7 @@ transparência/alpha) e move os arquivos convertidos para uma pasta de saída.
 ### Para compilar
 
 ```bash
-sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libwebp-dev
+sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libwebp-dev ffmpeg
 ```
 
 ### Para executar
@@ -57,9 +65,10 @@ go build -o image_reduce .
 ./image_reduce
 ```
 
-O app fica na bandeja. Clique no ícone para abrir a janela (histórico e
-configurações) ou sair. A janela também possui um botão **Fechar** no canto
-superior direito.
+O app fica na bandeja. Clique com o **botão esquerdo** no ícone para
+alternar (abrir/fechar) a janela de histórico e configurações; o menu (botão
+direito) permite abrir diretamente o **Histórico** ou as **Configurações**,
+ou sair. A janela possui um botão **Fechar** no canto superior direito.
 
 ## Tasks (mise)
 
@@ -84,6 +93,10 @@ Arquivo: `~/.config/image_reduce/config.json`
 | `max_concurrent` | Conversões simultâneas                           | `8`                                 |
 | `quality`        | Qualidade WebP (0–100, lossy)                    | `90`                                |
 | `delete_original`| Excluir o original em vez de mover para `processed/` | `false`                          |
+| `ignore_patterns`| Padrões separados por vírgula para ignorar arquivos (curingas `*`/`?`, casam com o nome) | `.*` (arquivos ocultos) |
+| `video_enabled`  | Converter vídeos para WebM (AV1 + Opus)        | `true`                              |
+| `video_crf`      | Qualidade do AV1 (1–63, menor = melhor)         | `32`                                |
+| `video_preset`   | Velocidade do encoder (0–13)                    | `6`                                 |
 
 A configuração também pode ser editada pela janela do app (aba
 "Configurações"). Alterações são aplicadas em tempo real.
@@ -97,6 +110,7 @@ internal/
   config/                Configuração persistida em JSON
   converter/             Conversão WebP + detecção de formato
   history/               Histórico persistido (JSONL, máx. 500 eventos)
+  video/                 Conversão de vídeos para WebM (AV1 + Opus) via ffmpeg
   queue/                 Pool de workers dinâmico
   tray/                  Ícone e menu da bandeja (fyne.io/systray)
   ui/                    Janela webview (histórico + configurações)

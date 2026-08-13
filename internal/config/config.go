@@ -4,7 +4,9 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -21,6 +23,15 @@ type Config struct {
 	MaxConcurrent  int     `json:"max_concurrent"`
 	Quality        float64 `json:"quality"`
 	DeleteOriginal bool    `json:"delete_original"`
+	// IgnorePatterns lista padrões separados por vírgula (ex.: ".*, *.rar").
+	// Por padrão, ".*" ignora arquivos ocultos.
+	IgnorePatterns string `json:"ignore_patterns"`
+	// VideoEnabled converte vídeos para WebM (AV1 + Opus).
+	VideoEnabled bool `json:"video_enabled"`
+	// VideoCRF é a qualidade do AV1 (menor = melhor qualidade, 1-63).
+	VideoCRF float64 `json:"video_crf"`
+	// VideoPreset é a velocidade do encoder (0-13 SVT-AV1, 0-8 libaom).
+	VideoPreset int `json:"video_preset"`
 }
 
 // Default retorna uma configuração com valores padrão.
@@ -32,6 +43,10 @@ func Default() *Config {
 		MaxConcurrent:  DefaultMaxConcurrent,
 		Quality:        DefaultQuality,
 		DeleteOriginal: false,
+		IgnorePatterns: ".*",
+		VideoEnabled:   true,
+		VideoCRF:       32,
+		VideoPreset:    6,
 	}
 }
 
@@ -101,6 +116,12 @@ func (c *Config) EnsureDefaults() {
 	if c.OutputDir == "" {
 		c.OutputDir = d.OutputDir
 	}
+	if c.VideoCRF <= 0 || c.VideoCRF > 63 {
+		c.VideoCRF = 32
+	}
+	if c.VideoPreset < 0 || c.VideoPreset > 13 {
+		c.VideoPreset = 6
+	}
 }
 
 // Save persiste a configuração em disco.
@@ -131,4 +152,27 @@ func (c *Config) EnsureDirs() error {
 // ProcessedDir retorna a subpasta onde originais mantidos são movidos.
 func (c *Config) ProcessedDir() string {
 	return filepath.Join(c.WatchDir, "processed")
+}
+
+// IgnoreList divide IgnorePatterns (separados por vírgula) em padrões limpos.
+func (c *Config) IgnoreList() []string {
+	var out []string
+	for _, p := range strings.Split(c.IgnorePatterns, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// IsIgnored informa se o arquivo deve ser ignorado pelos padrões configurados.
+// Os padrões usam curingas do path.Match (*, ?) e casam com o nome do arquivo.
+func (c *Config) IsIgnored(filePath string) bool {
+	name := filepath.Base(filePath)
+	for _, p := range c.IgnoreList() {
+		if ok, err := path.Match(p, name); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }

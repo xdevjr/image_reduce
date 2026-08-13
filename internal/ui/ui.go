@@ -5,8 +5,10 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/webview/webview_go"
 
@@ -18,30 +20,37 @@ import (
 //go:embed assets/index.html
 var htmlFS embed.FS
 
-// Command é um comando enviado pela tray para o loop da janela.
-type Command int
-
+// Tipos de comando enviados pela tray para o loop da janela.
 const (
-	// CmdOpen abre a janela de histórico/configurações.
-	CmdOpen Command = iota
+	// CmdOpen abre a janela (em uma aba específica, se indicada).
+	CmdOpen = iota
 	// CmdQuit encerra o aplicativo.
 	CmdQuit
 )
 
+// Command é um comando enviado pela tray para o loop da janela.
+type Command struct {
+	Kind int
+	Tab  string
+}
+
 // State é o estado inicial enviado ao front-end.
 type State struct {
-	Config  config.Config    `json:"config"`
-	History []*history.Event `json:"history"`
+	Config   config.Config    `json:"config"`
+	History  []*history.Event `json:"history"`
+	Watching bool             `json:"watching"`
+	Tab      string           `json:"tab"`
 }
 
 // UI coordena a janela webview e os comandos da tray.
 type UI struct {
-	a    *app.App
-	cmds chan Command
-	loop chan Command
-	open atomic.Bool
-	mu   sync.Mutex
-	w    webview.WebView
+	a       *app.App
+	cmds    chan Command
+	loop    chan Command
+	open    atomic.Bool
+	openTab string
+	mu      sync.Mutex
+	w       webview.WebView
 }
 
 // New cria uma UI ligada ao App.
@@ -53,18 +62,48 @@ func New(a *app.App) *UI {
 	}
 }
 
-// Open é chamado pela tray para abrir a janela.
-func (u *UI) Open() {
+// Open é chamado pela tray para abrir a janela na aba indicada
+// ("history" ou "config").
+func (u *UI) Open(tab string) {
 	select {
-	case u.cmds <- CmdOpen:
+	case u.cmds <- Command{Kind: CmdOpen, Tab: tab}:
 	default:
 	}
+}
+
+// OpenHistory abre a janela na aba Histórico.
+func (u *UI) OpenHistory() { u.openDelayed("history") }
+
+// OpenConfig abre a janela na aba Configurações.
+func (u *UI) OpenConfig() { u.openDelayed("config") }
+
+// openDelayed abre a janela após um pequeno atraso. Ao acionar pelo menu da
+// barra, o popup (xdg_popup) ainda detém o grab de ponteiro do compositor no
+// momento do clique; abrir a janela imediatamente faz o primeiro clique nela
+// ser consumido pelo grab que está sendo desfeito (observado no niri/XWayland).
+// O atraso deixa o popup fechar antes de a janela aparecer.
+func (u *UI) openDelayed(tab string) {
+	time.AfterFunc(300*time.Millisecond, func() { u.Open(tab) })
+}
+
+// Toggle alterna a visibilidade da janela: abre se fechada, fecha se aberta.
+func (u *UI) Toggle() {
+	if u.open.Load() {
+		u.mu.Lock()
+		w := u.w
+		u.mu.Unlock()
+		if w != nil {
+			w.Terminate()
+		}
+		return
+	}
+	u.Open("history")
 }
 
 // Quit é chamado pela tray para encerrar o aplicativo.
 func (u *UI) Quit() {
 	select {
-	case u.cmds <- CmdQuit:
+	case u.cmds <- Command{Kind: CmdQuit}:
 	default:
 	}
 }
@@ -75,9 +114,9 @@ func (u *UI) Run() {
 	for {
 		select {
 		case cmd := <-u.loop:
-			switch cmd {
+			switch cmd.Kind {
 			case CmdOpen:
-				u.openWindow()
+				u.openWindow(cmd.Tab)
 			case CmdQuit:
 				return
 			}
@@ -88,10 +127,19 @@ func (u *UI) Run() {
 // dispatcher lê comandos da tray e os encaminha ao loop da main thread.
 func (u *UI) dispatcher() {
 	for cmd := range u.cmds {
-		switch cmd {
+		switch cmd.Kind {
 		case CmdOpen:
 			if !u.open.Load() {
-				u.loop <- CmdOpen
+				u.loop <- cmd
+			} else {
+				// Janela já aberta: troca para a aba pedida e traz ao foco.
+				u.mu.Lock()
+				w := u.w
+				u.mu.Unlock()
+				if w != nil {
+					w.Eval("switchTab(" + strconv.Quote(cmd.Tab) + ")")
+					w.Dispatch(func() { w.Present() })
+				}
 			}
 		case CmdQuit:
 			u.mu.Lock()
@@ -102,14 +150,15 @@ func (u *UI) dispatcher() {
 				// processa o CmdQuit em seguida.
 				w.Terminate()
 			}
-			u.loop <- CmdQuit
+			u.loop <- Command{Kind: CmdQuit}
 		}
 	}
 }
 
-func (u *UI) openWindow() {
+func (u *UI) openWindow(tab string) {
 	u.open.Store(true)
 	defer u.open.Store(false)
+	u.openTab = tab
 
 	html, err := htmlFS.ReadFile("assets/index.html")
 	if err != nil {
@@ -132,6 +181,10 @@ func (u *UI) openWindow() {
 	// Navegar via data URL base64 evita problemas de renderização que ocorrem
 	// com SetHtml em algumas versões do WebKitGTK.
 	w.Navigate("data:text/html;base64," + base64.StdEncoding.EncodeToString(html))
+	// Dá foco à janela assim que o loop GTK iniciar. Sem isso, ao abrir pelo
+	// menu da tray a janela pode ficar sem foco e os botões só respondem
+	// após um clique dentro dela.
+	w.Dispatch(func() { w.Present() })
 	if err := w.Bind("getState", u.getState); err != nil {
 		return
 	}
@@ -139,6 +192,9 @@ func (u *UI) openWindow() {
 		return
 	}
 	if err := w.Bind("clearHistory", u.clearHistory); err != nil {
+		return
+	}
+	if err := w.Bind("setWatcherPaused", u.setWatcherPaused); err != nil {
 		return
 	}
 	if err := w.Bind("closeWindow", func() { w.Terminate() }); err != nil {
@@ -165,6 +221,19 @@ func (u *UI) openWindow() {
 		u.pushEvents(w, done)
 	}()
 
+	// Reforça o pedido de foco com retentativas: alguns compositores (ex.:
+	// niri/XWayland) só aceitam o foco após a janela estar plenamente visível.
+	for _, delay := range []time.Duration{300 * time.Millisecond, 800 * time.Millisecond} {
+		time.AfterFunc(delay, func() {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			w.Dispatch(func() { w.Present() })
+		})
+	}
+
 	w.Run()
 	close(done)
 	wg.Wait()
@@ -185,11 +254,12 @@ func (u *UI) pushEvents(w webview.WebView, done chan struct{}) {
 		}
 	}
 }
-
 func (u *UI) getState() State {
 	return State{
-		Config:  *u.a.Config(),
-		History: u.a.History(),
+		Config:   *u.a.Config(),
+		History:  u.a.History(),
+		Watching: !u.a.WatcherPaused(),
+		Tab:      u.openTab,
 	}
 }
 
@@ -199,4 +269,8 @@ func (u *UI) saveConfig(cfg config.Config) error {
 
 func (u *UI) clearHistory() {
 	u.a.ClearHistory()
+}
+
+func (u *UI) setWatcherPaused(paused bool) {
+	u.a.SetWatcherPaused(paused)
 }

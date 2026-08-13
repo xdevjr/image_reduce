@@ -19,16 +19,37 @@ package webview
 #include <stdlib.h>
 #include <stdint.h>
 
+#ifdef __linux__
+#include <gtk/gtk.h>
+#include <gdk/gdkx.h>
+#endif
+
+// cgoWebViewPresent dá foco à janela nativa (extensão local do fork).
+// Usa o timestamp do servidor X11 para contornar a prevenção de roubo de
+// foco de gerenciadores de janela/compositores (ex.: niri via XWayland).
+static void cgoWebViewPresent(webview_t w) {
+#ifdef __linux__
+  GtkWindow *window = GTK_WINDOW(webview_get_window(w));
+  gtk_widget_show_all(GTK_WIDGET(window));
+  guint32 t = GDK_CURRENT_TIME;
+  GdkWindow *gdk = gtk_widget_get_window(GTK_WIDGET(window));
+  if (gdk != NULL && GDK_IS_X11_WINDOW(gdk)) {
+    t = gdk_x11_get_server_time(gdk);
+  }
+  gtk_window_present_with_time(window, t);
+#endif
+}
+
 void CgoWebViewDispatch(webview_t w, uintptr_t arg);
 void CgoWebViewBind(webview_t w, const char *name, uintptr_t index);
 void CgoWebViewUnbind(webview_t w, const char *name);
 */
 import "C"
 import (
-	_ "github.com/webview/webview_go/libs/webview"
-	_ "github.com/webview/webview_go/libs/webview/include"
 	"encoding/json"
 	"errors"
+	_ "github.com/webview/webview_go/libs/webview"
+	_ "github.com/webview/webview_go/libs/webview/include"
 	"reflect"
 	"runtime"
 	"sync"
@@ -79,6 +100,10 @@ type WebView interface {
 	// pointer is GtkWindow pointer, when using Cocoa backend the pointer is
 	// NSWindow pointer, when using Win32 backend the pointer is HWND pointer.
 	Window() unsafe.Pointer
+
+	// Present apresenta a janela e dá foco a ela (gtk_window_present no GTK).
+	// Deve ser chamada na thread de UI, ou via Dispatch.
+	Present()
 
 	// SetTitle updates the title of the native window. Must be called from the UI
 	// thread.
@@ -170,6 +195,10 @@ func (w *webview) Terminate() {
 
 func (w *webview) Window() unsafe.Pointer {
 	return C.webview_get_window(w.w)
+}
+
+func (w *webview) Present() {
+	C.cgoWebViewPresent(w.w)
 }
 
 func (w *webview) Navigate(url string) {

@@ -275,6 +275,10 @@
         border-color: var(--danger);
         background: #3a1616;
       }
+      .action-btn.paused {
+        border-color: var(--warn);
+        color: var(--warn);
+      }
       .actions-bar .spacer {
         flex: 1;
       }
@@ -370,6 +374,9 @@
             📂 Abrir pasta de saída
           </button>
           <span class="spacer"></span>
+          <button type="button" class="action-btn" id="toggleWatcherBtn">
+            ⏸ Pausar monitoramento
+          </button>
           <button type="button" class="action-btn danger" id="clearHistoryBtn">
             🗑️ Limpar histórico
           </button>
@@ -417,7 +424,19 @@
               </button>
             </div>
             <span class="hint"
-              >Os arquivos .webp (e não-imagens) são movidos para cá.</span
+              >Os arquivos .webp (e não-imagens) são copiados para cá.</span
+            >
+          </div>
+          <div class="field">
+            <label for="ignorePatterns">Ignorar arquivos (padrões)</label>
+            <input
+              id="ignorePatterns"
+              type="text"
+              placeholder=".*, *.rar, foto.png"
+            />
+            <span class="hint"
+              >Padrões separados por vírgula (ex.: *.rar ou o nome completo do
+              arquivo). Por padrão, .* ignora arquivos ocultos.</span
             >
           </div>
           <div class="row-fields">
@@ -437,6 +456,26 @@
             </div>
           </div>
           <label class="checkbox">
+            <input id="videoEnabled" type="checkbox" />
+            Converter vídeos para WebM (AV1 + Opus)
+          </label>
+          <div class="row-fields">
+            <div class="field">
+              <label for="videoCrf"
+                >Qualidade de vídeo (CRF, menor = melhor)</label
+              >
+              <input id="videoCrf" type="number" min="1" max="63" step="1" />
+            </div>
+            <div class="field">
+              <label for="videoPreset">Velocidade AV1 (0–13)</label>
+              <input id="videoPreset" type="number" min="0" max="13" step="1" />
+            </div>
+          </div>
+          <span class="hint"
+            >Requer ffmpeg com encoder AV1 (libsvtav1 ou libaom-av1). Vídeos já
+            em WebM são recompactados apenas se ficarem menores.</span
+          >
+          <label class="checkbox">
             <input id="deleteOriginal" type="checkbox" />
             Apagar o arquivo original após a conversão
           </label>
@@ -449,6 +488,7 @@
     <script>
       const events = new Map();
       let currentConfig = null;
+      let watching = true;
 
       function $(id) {
         return document.getElementById(id);
@@ -529,10 +569,24 @@
         $("maxConcurrent").value = cfg.max_concurrent;
         $("quality").value = cfg.quality;
         $("deleteOriginal").checked = !!cfg.delete_original;
+        $("ignorePatterns").value = cfg.ignore_patterns || "";
+        $("videoEnabled").checked = !!cfg.video_enabled;
+        $("videoCrf").value = cfg.video_crf || 32;
+        $("videoPreset").value = cfg.video_preset || 6;
       }
 
       function renderStatus(cfg) {
-        $("status").textContent = "Monitorando: " + (cfg.watch_dir || "");
+        cfg = cfg || {};
+        $("status").textContent =
+          (watching ? "Monitorando: " : "Pausado: ") + (cfg.watch_dir || "");
+      }
+
+      function updateWatcherBtn() {
+        const btn = $("toggleWatcherBtn");
+        btn.textContent = watching
+          ? "⏸ Pausar monitoramento"
+          : "▶ Retomar monitoramento";
+        btn.classList.toggle("paused", !watching);
       }
 
       let toastTimer = null;
@@ -575,8 +629,13 @@
               clearTimeout(timeoutId);
               log("getState OK");
               currentConfig = state.config;
+              watching = state.watching !== false;
               fillConfig(state.config);
+              updateWatcherBtn();
               renderStatus(state.config);
+              if (state.tab === "config") {
+                switchTab("config");
+              }
               (state.history || []).forEach((e) => events.set(e.id, e));
               renderHistory();
             })
@@ -609,6 +668,10 @@
           max_concurrent: parseInt($("maxConcurrent").value, 10) || 8,
           quality: parseFloat($("quality").value) || 90,
           delete_original: $("deleteOriginal").checked,
+          ignore_patterns: $("ignorePatterns").value.trim(),
+          video_enabled: $("videoEnabled").checked,
+          video_crf: parseFloat($("videoCrf").value) || 32,
+          video_preset: parseInt($("videoPreset").value, 10) || 6,
         };
         try {
           saveConfig(cfg)
@@ -675,6 +738,22 @@
           toast("Histórico limpo!");
         } catch (e) {
           log("clearHistory erro: " + e);
+        }
+      });
+
+      $("toggleWatcherBtn").addEventListener("click", function () {
+        const next = !watching;
+        try {
+          setWatcherPaused(!next).then(function () {
+            watching = next;
+            updateWatcherBtn();
+            renderStatus(currentConfig);
+            toast(
+              watching ? "Monitoramento retomado!" : "Monitoramento pausado!",
+            );
+          });
+        } catch (e) {
+          log("setWatcherPaused erro: " + e);
         }
       });
 

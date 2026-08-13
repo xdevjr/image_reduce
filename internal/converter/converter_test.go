@@ -1,13 +1,18 @@
 package converter
 
 import (
+	"bytes"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/png"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/chai2010/webp"
 
 	"image_reduce/internal/config"
 	"image_reduce/internal/history"
@@ -125,9 +130,13 @@ func TestSkipAnimatedGif(t *testing.T) {
 	c := New(cfg, h, nil)
 	c.Process(src)
 
-	// gif movido sem conversão para a saída
+	// gif copiado sem conversão para a saída
 	if _, err := os.Stat(filepath.Join(cfg.OutputDir, "anim.gif")); err != nil {
-		t.Fatalf("gif não movido para saída: %v", err)
+		t.Fatalf("gif não copiado para saída: %v", err)
+	}
+	// original movido para processed/
+	if _, err := os.Stat(filepath.Join(cfg.WatchDir, "processed", "anim.gif")); err != nil {
+		t.Fatalf("original não movido para processed/: %v", err)
 	}
 	// não deve gerar webp
 	if _, err := os.Stat(filepath.Join(cfg.OutputDir, "anim.webp")); !os.IsNotExist(err) {
@@ -156,7 +165,14 @@ func TestSkipNonImage(t *testing.T) {
 	c.Process(src)
 
 	if _, err := os.Stat(filepath.Join(cfg.OutputDir, "nota.txt")); err != nil {
-		t.Fatalf("arquivo não-imagem não movido: %v", err)
+		t.Fatalf("arquivo não-imagem não copiado para saída: %v", err)
+	}
+	// original movido para processed/ (cópia na pasta de processados)
+	if _, err := os.Stat(filepath.Join(cfg.WatchDir, "processed", "nota.txt")); err != nil {
+		t.Fatalf("original não movido para processed/: %v", err)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatal("original não deveria permanecer na pasta monitorada")
 	}
 	var skipped bool
 	for _, e := range h.List() {
@@ -184,5 +200,126 @@ func TestUniqueNameCollision(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(cfg.OutputDir, "test-1.webp")); err != nil {
 		t.Fatalf("webp com sufixo não criado: %v", err)
+	}
+}
+
+func TestConvertWebP(t *testing.T) {
+	cfg, dir := newTestCfg(t, false)
+	cfg.Quality = 50
+
+	// imagem ruidosa codificada em WebP qualidade 100 (original "pesado")
+	img := image.NewRGBA(image.Rect(0, 0, 128, 128))
+	rnd := rand.New(rand.NewSource(42))
+	for y := 0; y < 128; y++ {
+		for x := 0; x < 128; x++ {
+			img.Set(x, y, color.RGBA{
+				R: uint8(rnd.Intn(256)),
+				G: uint8(rnd.Intn(256)),
+				B: uint8(rnd.Intn(256)),
+				A: 255,
+			})
+		}
+	}
+	var srcBuf bytes.Buffer
+	if err := webp.Encode(&srcBuf, img, &webp.Options{Quality: 100}); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(cfg.WatchDir, "foto.webp")
+	if err := os.WriteFile(src, srcBuf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := history.New(filepath.Join(dir, "history.jsonl"))
+	c := New(cfg, h, nil)
+	c.Process(src)
+
+	// webp recompactado na saída deve ser menor que o original
+	out := filepath.Join(cfg.OutputDir, "foto.webp")
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("webp não criado na saída: %v", err)
+	}
+	if int64(len(data)) >= int64(srcBuf.Len()) {
+		t.Fatalf("webp recompactado deveria ser menor: %d >= %d", len(data), srcBuf.Len())
+	}
+	// original movido para processed/
+	if _, err := os.Stat(filepath.Join(cfg.WatchDir, "processed", "foto.webp")); err != nil {
+		t.Fatalf("original não movido para processed/: %v", err)
+	}
+	// evento done registrado
+	var done bool
+	for _, e := range h.List() {
+		if e.Status == history.StatusDone {
+			done = true
+		}
+	}
+	if !done {
+		t.Fatal("evento done não encontrado")
+	}
+}
+
+func TestSkipAnimatedWebP(t *testing.T) {
+	cfg, dir := newTestCfg(t, false)
+	// cabeçalho WebP com chunk VP8X e flag de animação (0x04) ativa
+	buf := make([]byte, 30)
+	copy(buf[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(len(buf)-8))
+	copy(buf[8:12], "WEBP")
+	copy(buf[12:16], "VP8X")
+	binary.LittleEndian.PutUint32(buf[16:20], 10)
+	buf[20] = 0x04 // flags: bit de animação
+	src := filepath.Join(cfg.WatchDir, "anim.webp")
+	if err := os.WriteFile(src, buf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := history.New(filepath.Join(dir, "history.jsonl"))
+	c := New(cfg, h, nil)
+	c.Process(src)
+
+	if _, err := os.Stat(filepath.Join(cfg.OutputDir, "anim.webp")); err != nil {
+		t.Fatalf("webp animado não copiado para a saída: %v", err)
+	}
+	// original movido para processed/
+	if _, err := os.Stat(filepath.Join(cfg.WatchDir, "processed", "anim.webp")); err != nil {
+		t.Fatalf("original não movido para processed/: %v", err)
+	}
+	var skipped bool
+	for _, e := range h.List() {
+		if e.Status == history.StatusSkipped && e.Reason == "animated webp" {
+			skipped = true
+		}
+	}
+	if !skipped {
+		t.Fatal("evento skipped (animated webp) não encontrado")
+	}
+}
+
+func TestVideoInvalidFile(t *testing.T) {
+	cfg, dir := newTestCfg(t, false)
+	cfg.VideoEnabled = true
+	cfg.VideoCRF = 32
+	cfg.VideoPreset = 6
+	src := filepath.Join(cfg.WatchDir, "filme.mp4")
+	if err := os.WriteFile(src, []byte("dados inválidos"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := history.New(filepath.Join(dir, "history.jsonl"))
+	c := New(cfg, h, nil)
+	c.Process(src)
+
+	// original não deve ser movido nem apagado em caso de falha
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("original não deveria ter sido removido: %v", err)
+	}
+	var hasError bool
+	for _, e := range h.List() {
+		if e.Status == history.StatusError && e.Error != "" {
+			hasError = true
+		}
+	}
+	if !hasError {
+		t.Fatal("evento error não encontrado")
 	}
 }

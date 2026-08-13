@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -15,10 +16,13 @@ import (
 
 // Watcher observa a pasta de entrada usando fsnotify.
 type Watcher struct {
-	cfg   *config.Config
-	queue *queue.Queue
-	fw    *fsnotify.Watcher
-	done  chan struct{}
+	cfg     *config.Config
+	queue   *queue.Queue
+	fw      *fsnotify.Watcher
+	done    chan struct{}
+	mu      sync.RWMutex
+	paused  bool
+	pending map[string]struct{}
 }
 
 // New cria um Watcher para a pasta configurada.
@@ -27,7 +31,13 @@ func New(cfg *config.Config, q *queue.Queue) (*Watcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Watcher{cfg: cfg, queue: q, fw: fw, done: make(chan struct{})}, nil
+	return &Watcher{
+		cfg:     cfg,
+		queue:   q,
+		fw:      fw,
+		done:    make(chan struct{}),
+		pending: make(map[string]struct{}),
+	}, nil
 }
 
 // Start inicia o monitoramento e faz um scan inicial da pasta.
@@ -53,6 +63,25 @@ func (w *Watcher) Stop() {
 	w.fw.Close()
 }
 
+// Paused informa se o monitoramento está pausado.
+func (w *Watcher) Paused() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.paused
+}
+
+// SetPaused pausa ou retoma o monitoramento. Ao retomar, arquivos que
+// chegaram durante a pausa são enfileirados por um novo scan da pasta.
+func (w *Watcher) SetPaused(paused bool) {
+	w.mu.Lock()
+	changed := w.paused != paused
+	w.paused = paused
+	w.mu.Unlock()
+	if changed && !paused {
+		go w.scanExisting()
+	}
+}
+
 func (w *Watcher) loop() {
 	for {
 		select {
@@ -62,6 +91,16 @@ func (w *Watcher) loop() {
 			if !ok {
 				return
 			}
+			// Renomeação/remoção libera o nome (arquivo já tratado pelo
+			// conversor), permitindo que o mesmo nome seja enfileirado
+			// novamente no futuro.
+			if ev.Op&(fsnotify.Rename|fsnotify.Remove) != 0 {
+				w.forgetPending(ev.Name)
+				continue
+			}
+			if w.Paused() {
+				continue
+			}
 			if ev.Op&(fsnotify.Create|fsnotify.Write) == 0 {
 				continue
 			}
@@ -70,9 +109,17 @@ func (w *Watcher) loop() {
 			}
 			info, err := os.Stat(ev.Name)
 			if err != nil || info.IsDir() {
+				// Arquivo sumiu antes de enfileirar: libera o nome.
+				w.forgetPending(ev.Name)
+				continue
+			}
+			// Um mesmo arquivo gera vários eventos (Create + Write);
+			// enfileira apenas a primeira vez.
+			if !w.markPending(ev.Name) {
 				continue
 			}
 			if !w.waitStable(ev.Name) {
+				w.forgetPending(ev.Name)
 				continue
 			}
 			w.queue.Enqueue(ev.Name)
@@ -84,7 +131,8 @@ func (w *Watcher) loop() {
 	}
 }
 
-// ignored retorna true para a subpasta processed/ e para a própria raiz.
+// ignored retorna true para a subpasta processed/, para a própria raiz e para
+// arquivos que casem com os padrões de ignorar da configuração.
 func (w *Watcher) ignored(path string) bool {
 	rel, err := filepath.Rel(w.cfg.WatchDir, path)
 	if err != nil {
@@ -93,14 +141,37 @@ func (w *Watcher) ignored(path string) bool {
 	if rel == "." {
 		return true
 	}
-	return rel == "processed" || strings.HasPrefix(rel, "processed"+string(filepath.Separator))
+	if rel == "processed" || strings.HasPrefix(rel, "processed"+string(filepath.Separator)) {
+		return true
+	}
+	return w.cfg.IsIgnored(rel)
+}
+
+// markPending registra o arquivo como já enfileirado. Retorna false se ele
+// já estiver pendente (eventos duplicados de Create/Write).
+func (w *Watcher) markPending(path string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.pending[path]; ok {
+		return false
+	}
+	w.pending[path] = struct{}{}
+	return true
+}
+
+// forgetPending libera o nome do arquivo (processado, removido ou instável).
+func (w *Watcher) forgetPending(path string) {
+	w.mu.Lock()
+	delete(w.pending, path)
+	w.mu.Unlock()
 }
 
 // waitStable aguarda o arquivo parar de crescer (cópia concluída).
+// O limite maior acomoda cópias de vídeos grandes.
 func (w *Watcher) waitStable(path string) bool {
 	var lastSize int64 = -1
 	stable := 0
-	for i := 0; i < 50; i++ { // máx. ~10s
+	for i := 0; i < 100; i++ { // máx. ~20s
 		info, err := os.Stat(path)
 		if err != nil {
 			return false
@@ -131,6 +202,9 @@ func (w *Watcher) scanExisting() {
 		}
 		p := filepath.Join(w.cfg.WatchDir, e.Name())
 		if w.ignored(p) {
+			continue
+		}
+		if !w.markPending(p) {
 			continue
 		}
 		w.queue.Enqueue(p)

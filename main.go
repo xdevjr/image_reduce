@@ -35,6 +35,6 @@ func main() {
 	log.Printf("image_reduce rodando. Monitorando %s -> %s", cfg.WatchDir, cfg.OutputDir)
 
 	u := ui.New(a)
-	go tray.Run(u.Open, u.Quit)
+	go tray.Run(u.Toggle, u.OpenHistory, u.OpenConfig, u.Quit)
 	u.Run()
 }
