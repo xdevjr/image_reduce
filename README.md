@@ -48,9 +48,13 @@ O script `install.sh` (na raiz do repositório):
   `~/.local/bin` (pasta oculta na home do usuário);
 - adiciona `~/.local/bin` ao `PATH` **automaticamente** no shell do usuário
   (`.bashrc`, `.zshrc` ou `config.fish` do fish) — basta abrir um novo
-  terminal para usar o comando `image_reduce`.
+  terminal para usar o comando `image_reduce`;
+- cria um **atalho no launcher** (`.desktop`) com ícone, em
+  `~/.local/share/applications/image_reduce.desktop`, que inicia o app em
+  segundo plano (`image_reduce start`) — basta procurar por **Image Reduce**
+  no menu de aplicativos.
 
-Para desinstalar (remove o binário e a linha do PATH adicionada):
+Para desinstalar (remove o binário, a linha do PATH e o atalho `.desktop`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xdevjr/image_reduce/main/install.sh | bash -s -- --uninstall

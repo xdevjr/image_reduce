@@ -19,6 +19,7 @@
 #   3. Clona o repositório (shallow), compila e instala o binário em BIN_DIR
 #      (~/.local/bin) e adiciona essa pasta ao PATH automaticamente no shell
 #      (.bashrc, .zshrc ou config.fish do fish).
+#   4. Cria o atalho .desktop (com ícone) para iniciar o app pelo launcher.
 #
 set -euo pipefail
 
@@ -169,6 +170,60 @@ build_and_install() {
 }
 
 # ---------------------------------------------------------------------------
+# Atalho .desktop — permite iniciar o app pelo launcher de aplicativos
+# ---------------------------------------------------------------------------
+desktop_dirs() {
+  if [ "$(id -u)" -eq 0 ]; then
+    echo "/usr/share/applications" "/usr/share/icons/hicolor/256x256/apps"
+  else
+    echo "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/256x256/apps"
+  fi
+}
+
+install_desktop() {
+  local apps_dir icons_dir icon_name desktop_file
+  apps_dir="$(desktop_dirs | awk '{print $1}')"
+  icons_dir="$(desktop_dirs | awk '{print $2}')"
+  icon_name="image_reduce"
+
+  mkdir -p "$apps_dir" 2>/dev/null || maybe_sudo mkdir -p "$apps_dir"
+  mkdir -p "$icons_dir" 2>/dev/null || maybe_sudo mkdir -p "$icons_dir"
+
+  # Copia o ícone (extraído do repositório clonado).
+  if [ -f "$TMPDIR/image_reduce/internal/tray/icon.png" ]; then
+    if ! install -m 0644 "$TMPDIR/image_reduce/internal/tray/icon.png" \
+        "$icons_dir/$icon_name.png" 2>/dev/null; then
+      maybe_sudo install -m 0644 "$TMPDIR/image_reduce/internal/tray/icon.png" \
+        "$icons_dir/$icon_name.png"
+    fi
+    info "Ícone instalado em $icons_dir/$icon_name.png"
+  else
+    warn "Ícone não encontrado no repositório; o atalho ficará sem ícone."
+  fi
+
+  # Exec usa `start` para abrir em segundo plano (sem prender nada).
+  desktop_file="$apps_dir/$icon_name.desktop"
+  cat > "$desktop_file" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Image Reduce
+Comment=Converte imagens para WebP automaticamente a partir de uma pasta monitorada
+Exec="$BIN_DIR/image_reduce" start
+Icon=$icons_dir/$icon_name.png
+Terminal=false
+Categories=Graphics;Utility;
+StartupNotify=false
+EOF
+  chmod 0644 "$desktop_file" 2>/dev/null || maybe_sudo chmod 0644 "$desktop_file"
+
+  # Atualiza o índice de aplicativos, se disponível (opcional).
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$apps_dir" >/dev/null 2>&1 || true
+  fi
+  info "Atalho criado: $desktop_file"
+}
+
+# ---------------------------------------------------------------------------
 # PATH — adiciona BIN_DIR ao PATH automaticamente no shell do usuário
 # ---------------------------------------------------------------------------
 shell_rc_file() {
@@ -215,8 +270,6 @@ ensure_path() {
 # ---------------------------------------------------------------------------
 # Desinstalação
 # ---------------------------------------------------------------------------
-# Desinstalação
-# ---------------------------------------------------------------------------
 remove_path_from_rc() {
   local rc line
   rc="$(shell_rc_file)"
@@ -242,6 +295,24 @@ uninstall() {
     warn "Nenhum binário encontrado em $BIN_DIR/image_reduce"
   fi
   remove_path_from_rc
+  remove_desktop
+}
+
+# remove_desktop apaga o atalho .desktop e o ícone instalados pelo instalador.
+remove_desktop() {
+  local apps_dir icons_dir desktop_file icon_file
+  apps_dir="$(desktop_dirs | awk '{print $1}')"
+  icons_dir="$(desktop_dirs | awk '{print $2}')"
+  desktop_file="$apps_dir/image_reduce.desktop"
+  icon_file="$icons_dir/image_reduce.png"
+
+  rm -f "$desktop_file" 2>/dev/null || maybe_sudo rm -f "$desktop_file"
+  rm -f "$icon_file" 2>/dev/null || maybe_sudo rm -f "$icon_file"
+
+  if [ -d "$apps_dir" ] && command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$apps_dir" >/dev/null 2>&1 || true
+  fi
+  info "Atalho .desktop e ícone removidos."
 }
 
 # ---------------------------------------------------------------------------
@@ -259,10 +330,12 @@ main() {
   install_system_deps
   ensure_go
   build_and_install
+  install_desktop
   ensure_path
   echo
   info "Instalação concluída!"
   info "Binário: $BIN_DIR/image_reduce"
+  info "Atalho: $(desktop_dirs | awk '{print $1}')/image_reduce.desktop"
   case ":$PATH:" in
     *":$BIN_DIR:"*) info "Comando 'image_reduce' disponível no PATH atual." ;;
     *) info "Abra um novo terminal (ou rode 'source $HOME/.bashrc') para usar 'image_reduce'." ;;
