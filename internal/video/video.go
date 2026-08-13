@@ -65,6 +65,22 @@ func Available() bool {
 	return err == nil
 }
 
+// IsIncompleteFile informa se o erro do ffmpeg indica um arquivo ainda em
+// escrita/cópia (ex.: "moov atom not found") em vez de um vídeo corrompido.
+func IsIncompleteFile(err error) bool {
+	msg := err.Error()
+	for _, frag := range []string{
+		"moov atom not found",
+		"Invalid data found when processing input",
+		"Error opening input",
+	} {
+		if strings.Contains(msg, frag) {
+			return true
+		}
+	}
+	return false
+}
+
 // Convert converte src para WebM (AV1 + Opus) gravando em dst.
 func Convert(src, dst string, crf float64, preset int) error {
 	enc, err := detectEncoder()

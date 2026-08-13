@@ -21,6 +21,7 @@ import (
 	_ "golang.org/x/image/tiff"
 
 	"image_reduce/internal/config"
+	"image_reduce/internal/fsutil"
 	"image_reduce/internal/history"
 	"image_reduce/internal/video"
 )
@@ -42,6 +43,10 @@ type Converter struct {
 	snap    Snapshot
 	history *history.Store
 	events  chan<- *history.Event
+	// onIncomplete é chamado quando um vídeo falha por arquivo incompleto
+	// após as tentativas, permitindo que o watcher re-enfileire o arquivo
+	// quando ele terminar de ser copiado/baixado.
+	onIncomplete func(path string)
 }
 
 var idCounter int64
@@ -55,6 +60,27 @@ func New(cfg *config.Config, h *history.Store, events chan<- *history.Event) *Co
 	c := &Converter{history: h, events: events}
 	c.SetConfig(cfg)
 	return c
+}
+
+// SetOnIncomplete registra um callback chamado quando uma conversão de vídeo
+// falha por arquivo incompleto (ainda sendo copiado/baixado) após as
+// tentativas de conversão.
+func (c *Converter) SetOnIncomplete(fn func(path string)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onIncomplete = fn
+}
+
+// notifyIncomplete chama o callback registrado (se houver) para que o
+// watcher libere o nome do arquivo e o re-enfileire quando ele terminar
+// de ser copiado/baixado.
+func (c *Converter) notifyIncomplete(path string) {
+	c.mu.RLock()
+	fn := c.onIncomplete
+	c.mu.RUnlock()
+	if fn != nil {
+		fn(path)
+	}
 }
 
 // SetConfig atualiza as opções usadas pelas próximas conversões.
@@ -209,8 +235,13 @@ func (c *Converter) processVideo(ev *history.Event, src string, snap Snapshot) {
 	tmpPath := tmp.Name()
 	tmp.Close()
 
-	if err := video.Convert(src, tmpPath, snap.VideoCRF, snap.VideoPreset); err != nil {
+	if err := convertVideoWithRetry(src, tmpPath, snap.VideoCRF, snap.VideoPreset); err != nil {
 		os.Remove(tmpPath)
+		if video.IsIncompleteFile(err) {
+			// Arquivo ainda incompleto após as tentativas: libera o nome no
+			// watcher para que seja re-enfileirado quando terminar de chegar.
+			c.notifyIncomplete(src)
+		}
 		c.fail(ev, fmt.Errorf("falha na conversão de vídeo: %w", err))
 		return
 	}
@@ -248,6 +279,29 @@ func (c *Converter) processVideo(ev *history.Event, src string, snap Snapshot) {
 		}
 		c.emit(errEv)
 	}
+}
+
+// convertVideoWithRetry tenta a conversão, aguardando o arquivo terminar de
+// ser copiado/baixado quando o ffmpeg reportar arquivo incompleto (ex.:
+// "moov atom not found"). Retorna o erro final se o arquivo persistir
+// inválido após as tentativas.
+func convertVideoWithRetry(src, dst string, crf float64, preset int) error {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			// Aguarda o arquivo parar de crescer antes de tentar de novo.
+			fsutil.WaitStable(src, 30*time.Second)
+		}
+		lastErr = video.Convert(src, dst, crf, preset)
+		if lastErr == nil {
+			return nil
+		}
+		if !video.IsIncompleteFile(lastErr) {
+			return lastErr
+		}
+	}
+	return lastErr
 }
 
 // moveAsIs copia um arquivo sem conversão para a pasta de saída e trata o

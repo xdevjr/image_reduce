@@ -41,6 +41,7 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 	a.watcher = w
+	a.conv.SetOnIncomplete(a.watcher.ForgetPending)
 	return a, nil
 }
 
@@ -112,6 +113,7 @@ func (a *App) SaveConfig(cfg *config.Config) error {
 			return err
 		}
 		a.watcher = w
+		a.conv.SetOnIncomplete(a.watcher.ForgetPending)
 		if err := a.watcher.Start(); err != nil {
 			return err
 		}

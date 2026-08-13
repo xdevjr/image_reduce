@@ -11,6 +11,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"image_reduce/internal/config"
+	"image_reduce/internal/fsutil"
 	"image_reduce/internal/queue"
 )
 
@@ -166,28 +167,16 @@ func (w *Watcher) forgetPending(path string) {
 	w.mu.Unlock()
 }
 
+// ForgetPending libera o nome do arquivo para que possa ser enfileirado
+// novamente (ex.: após falha por arquivo incompleto).
+func (w *Watcher) ForgetPending(path string) {
+	w.forgetPending(path)
+}
+
 // waitStable aguarda o arquivo parar de crescer (cópia concluída).
 // O limite maior acomoda cópias de vídeos grandes.
 func (w *Watcher) waitStable(path string) bool {
-	var lastSize int64 = -1
-	stable := 0
-	for i := 0; i < 100; i++ { // máx. ~20s
-		info, err := os.Stat(path)
-		if err != nil {
-			return false
-		}
-		if info.Size() == lastSize && lastSize >= 0 {
-			stable++
-			if stable >= 2 {
-				return true
-			}
-		} else {
-			stable = 0
-		}
-		lastSize = info.Size()
-		time.Sleep(200 * time.Millisecond)
-	}
-	return false
+	return fsutil.WaitStable(path, 20*time.Second)
 }
 
 // scanExisting enfileira arquivos já presentes na pasta no boot.

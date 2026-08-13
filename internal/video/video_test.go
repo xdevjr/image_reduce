@@ -1,6 +1,7 @@
 package video
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,5 +66,24 @@ func TestConvertWebM(t *testing.T) {
 	}
 	if out.Size() >= info.Size() {
 		t.Fatalf("webm deveria ser menor que o original: %d >= %d", out.Size(), info.Size())
+	}
+}
+
+func TestIsIncompleteFile(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"moov atom ausente", fmt.Errorf("exit status 183: moov atom not found"), true},
+		{"dados inválidos na entrada", fmt.Errorf("exit status 183: Invalid data found when processing input"), true},
+		{"erro ao abrir entrada", fmt.Errorf("exit status 183: Error opening input file x.mp4"), true},
+		{"erro de encoder", fmt.Errorf("exit status 1: encoder not found"), false},
+		{"arquivo não encontrado", fmt.Errorf("exit status 1: No such file or directory"), false},
+	}
+	for _, c := range cases {
+		if got := IsIncompleteFile(c.err); got != c.want {
+			t.Errorf("IsIncompleteFile(%q) = %v, esperado %v", c.err, got, c.want)
+		}
 	}
 }
