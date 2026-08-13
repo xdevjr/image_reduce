@@ -36,3 +36,7 @@ run = "go build -o image_reduce . && ./image_reduce start"
 [tasks.stop]
 description = "Encerra o app rodando em segundo plano"
 run = "./image_reduce stop"
+
+[tasks.reset]
+description = "Restaura a configuração para os valores padrão"
+run = "./image_reduce reset"

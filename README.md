@@ -113,6 +113,7 @@ O binário aceita os subcomandos abaixo. Sem comando, exibe a ajuda.
 | `image_reduce run`   | Roda em primeiro plano, prendendo o terminal            |
 | `image_reduce start` | Inicia em **segundo plano** — o comando retorna na hora |
 | `image_reduce stop`  | Encerra o processo iniciado por `image_reduce start`    |
+| `image_reduce reset` | Restaura a configuração para os valores padrão          |
 | `image_reduce help`  | Mostra a ajuda de uso                                   |
 
 ```bash

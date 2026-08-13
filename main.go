@@ -125,6 +125,22 @@ func stopDaemon() {
 	os.Exit(0)
 }
 
+// resetConfig restaura o arquivo de configuração para os valores padrão.
+func resetConfig() {
+	cfg := config.Default()
+	if err := cfg.Save(); err != nil {
+		log.Fatalf("reset: %v", err)
+	}
+	path, err := config.ConfigPath()
+	if err != nil {
+		log.Fatalf("reset: %v", err)
+	}
+	fmt.Println("Configuração restaurada para o padrão.")
+	fmt.Printf("Arquivo: %s\n", path)
+	fmt.Println("Reinicie o app (image_reduce run) para aplicar as mudanças.")
+	os.Exit(0)
+}
+
 // printHelp exibe a ajuda de uso do binário.
 func printHelp() {
 	fmt.Print(`image_reduce — converte imagens para WebP automaticamente
@@ -133,6 +149,7 @@ Uso:
   image_reduce run     Executa em primeiro plano (prende o terminal)
   image_reduce start   Inicia em segundo plano (não prende o terminal)
   image_reduce stop    Encerra a execução em segundo plano
+  image_reduce reset   Restaura a configuração para os valores padrão
   image_reduce help    Mostra esta ajuda
 
 Quando executado sem comando, esta ajuda é exibida.
@@ -148,6 +165,8 @@ func main() {
 			startDaemon()
 		case "stop":
 			stopDaemon()
+		case "reset":
+			resetConfig()
 		case "help", "-h", "--help":
 			printHelp()
 			os.Exit(0)
