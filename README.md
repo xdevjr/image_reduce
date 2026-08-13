@@ -28,6 +28,50 @@ transparência/alpha) e move os arquivos convertidos para uma pasta de saída.
   saída** abrem as pastas no gerenciador de arquivos (via `xdg-open`), e o
   botão **Limpar histórico** apaga todos os eventos registrados.- �💾 Configuração persistida em `~/.config/image_reduce/config.json`.
 
+## Instalação
+
+Instale o binário e as dependências necessárias com um único comando (requer
+`curl` e `bash`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xdevjr/image_reduce/main/install.sh | bash
+```
+
+O script `install.sh` (na raiz do repositório):
+
+- detecta o gerenciador de pacotes (**apt**, **dnf**, **pacman**, **zypper**) e
+  instala as dependências de build/runtime quando necessário
+  (`libgtk-3-dev libwebkit2gtk-4.1-dev libwebp-dev ffmpeg git curl`);
+- garante um Go compatível (baixa o Go 1.26.5 para `~/.local/go` se o instalado
+  for antigo ou ausente);
+- clona o repositório (shallow), compila e instala o binário em
+  `~/.local/bin` (pasta oculta na home do usuário);
+- adiciona `~/.local/bin` ao `PATH` **automaticamente** no shell do usuário
+  (`.bashrc`, `.zshrc` ou `config.fish` do fish) — basta abrir um novo
+  terminal para usar o comando `image_reduce`.
+
+Para desinstalar (remove o binário e a linha do PATH adicionada):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xdevjr/image_reduce/main/install.sh | bash -s -- --uninstall
+```
+
+### Variáveis de ambiente
+
+| Variável     | Padrão                | Descrição                                       |
+|--------------|-----------------------|-------------------------------------------------|
+| `BIN_DIR`    | `~/.local/bin`        | Pasta oculta na home onde o binário é instalado |
+| `REPO`       | `xdevjr/image_reduce` | Repositório GitHub (owner/repo)                 |
+| `BRANCH`     | `main`                | Branch a instalar                               |
+| `GO_VERSION` | `1.26.5`              | Versão do Go baixada se necessário              |
+
+Exemplo instalando em outra pasta (também adicionada ao `PATH`):
+
+```bash
+BIN_DIR="$HOME/.bin" \
+  curl -fsSL https://raw.githubusercontent.com/xdevjr/image_reduce/main/install.sh | bash
+```
+
 ## Dependências de sistema
 
 ### Para compilar
@@ -61,14 +105,45 @@ go build -o image_reduce .
 
 ## Executar
 
+O binário aceita os subcomandos abaixo. Sem comando, exibe a ajuda.
+
+| Comando              | Efeito                                                  |
+|----------------------|---------------------------------------------------------|
+| `image_reduce`       | Mostra a ajuda de uso                                   |
+| `image_reduce run`   | Roda em primeiro plano, prendendo o terminal            |
+| `image_reduce start` | Inicia em **segundo plano** — o comando retorna na hora |
+| `image_reduce stop`  | Encerra o processo iniciado por `image_reduce start`    |
+| `image_reduce help`  | Mostra a ajuda de uso                                   |
+
 ```bash
-./image_reduce
+image_reduce run
 ```
 
 O app fica na bandeja. Clique com o **botão esquerdo** no ícone para
 alternar (abrir/fechar) a janela de histórico e configurações; o menu (botão
 direito) permite abrir diretamente o **Histórico** ou as **Configurações**,
 ou sair. A janela possui um botão **Fechar** no canto superior direito.
+
+### Iniciar/parar sem prender o terminal
+
+Inicia e encerra o processo em segundo plano:
+
+```bash
+image_reduce start
+# → image_reduce rodando em segundo plano (pid 12345).
+#   Log: ~/.cache/image_reduce/image_reduce.log
+#   Para parar: image_reduce stop
+
+image_reduce stop
+# → Encerrando image_reduce (pid 12345)... image_reduce encerrado.
+```
+
+A saída do processo em segundo plano é gravada no log
+`~/.cache/image_reduce/image_reduce.log` e o pid fica em
+`~/.cache/image_reduce/image_reduce.pid`. Também é possível parar pela
+bandeja (menu → **Sair**).
+
+Com o mise, os atalhos `mise run start` e `mise run stop` fazem o mesmo.
 
 ## Tasks (mise)
 

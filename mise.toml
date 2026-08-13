@@ -7,11 +7,11 @@ go = "1.26.5"
 [shell_alias]
 dev = "mise run dev"
 build = "mise run build"
-brun = "mise run build && ./image_reduce"
+brun = "mise run build && ./image_reduce run"
 
 [tasks.dev]
-description = "Roda o app em modo dev (go run)"
-run = "go run ."
+description = "Roda o app em modo dev, em primeiro plano (go run . run)"
+run = "go run . run"
 
 [tasks.build]
 description = "Compila o binário image_reduce"
@@ -20,3 +20,19 @@ run = "go build -o image_reduce ."
 [tasks.test]
 description = "Roda os testes do projeto"
 run = "go test ./..."
+
+[tasks.install]
+description = "Instala o binário image_reduce"
+run = "./install.sh"
+
+[tasks.uninstall]
+description = "Remove o binário image_reduce da pasta bin"
+run = "./install.sh --uninstall"
+
+[tasks.start]
+description = "Compila e inicia o app em segundo plano (sem prender o terminal)"
+run = "go build -o image_reduce . && ./image_reduce start"
+
+[tasks.stop]
+description = "Encerra o app rodando em segundo plano"
+run = "./image_reduce stop"
