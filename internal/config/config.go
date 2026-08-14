@@ -32,6 +32,14 @@ type Config struct {
 	VideoCRF float64 `json:"video_crf"`
 	// VideoPreset é a velocidade do encoder (0-13 SVT-AV1, 0-8 libaom).
 	VideoPreset int `json:"video_preset"`
+	// NotificationsEnabled liga/desliga todas as notificações do sistema.
+	NotificationsEnabled bool `json:"notifications_enabled"`
+	// NotifyOnDone notifica quando uma conversão é concluída.
+	NotifyOnDone bool `json:"notify_on_done"`
+	// NotifyOnError notifica quando uma conversão falha.
+	NotifyOnError bool `json:"notify_on_error"`
+	// NotifyOnSkipped notifica quando um arquivo é ignorado (sem conversão).
+	NotifyOnSkipped bool `json:"notify_on_skipped"`
 }
 
 // Default retorna uma configuração com valores padrão.
@@ -47,6 +55,12 @@ func Default() *Config {
 		VideoEnabled:   true,
 		VideoCRF:       32,
 		VideoPreset:    6,
+		// Notificações ligadas por padrão; "ignorado" fica desligado para
+		// evitar ruído com arquivos que não são imagens.
+		NotificationsEnabled: true,
+		NotifyOnDone:         true,
+		NotifyOnError:        true,
+		NotifyOnSkipped:      false,
 	}
 }
 
@@ -97,8 +111,26 @@ func Load() (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+	// Migração: configs criadas antes das notificações não têm os campos;
+	// assume os padrões (notificações ligadas) em vez de desligadas.
+	if !hasJSONKey(data, "notifications_enabled") {
+		cfg.NotificationsEnabled = true
+		cfg.NotifyOnDone = true
+		cfg.NotifyOnError = true
+		cfg.NotifyOnSkipped = false
+	}
 	cfg.EnsureDefaults()
 	return cfg, nil
+}
+
+// hasJSONKey informa se o JSON contém a chave no nível raiz.
+func hasJSONKey(data []byte, key string) bool {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
 }
 
 // EnsureDefaults corrige valores inválidos ou vazios.

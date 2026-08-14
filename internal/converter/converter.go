@@ -23,6 +23,7 @@ import (
 	"image_reduce/internal/config"
 	"image_reduce/internal/fsutil"
 	"image_reduce/internal/history"
+	"image_reduce/internal/notify"
 	"image_reduce/internal/video"
 )
 
@@ -35,6 +36,11 @@ type Snapshot struct {
 	VideoEnabled   bool
 	VideoCRF       float64
 	VideoPreset    int
+	// Preferências de notificação do sistema.
+	NotificationsEnabled bool
+	NotifyOnDone         bool
+	NotifyOnError        bool
+	NotifyOnSkipped      bool
 }
 
 // Converter processa arquivos: converte imagens para WebP e trata originais.
@@ -43,6 +49,8 @@ type Converter struct {
 	snap    Snapshot
 	history *history.Store
 	events  chan<- *history.Event
+	// notifier envia notificações do sistema para eventos terminais.
+	notifier *notify.Notifier
 	// onIncomplete é chamado quando um vídeo falha por arquivo incompleto
 	// após as tentativas, permitindo que o watcher re-enfileire o arquivo
 	// quando ele terminar de ser copiado/baixado.
@@ -57,7 +65,7 @@ func newID() string {
 
 // New cria um Converter ligado ao histórico e ao canal de eventos.
 func New(cfg *config.Config, h *history.Store, events chan<- *history.Event) *Converter {
-	c := &Converter{history: h, events: events}
+	c := &Converter{history: h, events: events, notifier: notify.New()}
 	c.SetConfig(cfg)
 	return c
 }
@@ -95,6 +103,11 @@ func (c *Converter) SetConfig(cfg *config.Config) {
 		VideoEnabled:   cfg.VideoEnabled,
 		VideoCRF:       cfg.VideoCRF,
 		VideoPreset:    cfg.VideoPreset,
+		// Preferências de notificação.
+		NotificationsEnabled: cfg.NotificationsEnabled,
+		NotifyOnDone:         cfg.NotifyOnDone,
+		NotifyOnError:        cfg.NotifyOnError,
+		NotifyOnSkipped:      cfg.NotifyOnSkipped,
 	}
 }
 
@@ -338,6 +351,134 @@ func (c *Converter) emit(ev *history.Event) {
 		default:
 		}
 	}
+	c.notify(ev)
+}
+
+// notify envia uma notificação do sistema para eventos terminais, conforme
+// as preferências configuradas. É best-effort e nunca bloqueia o worker.
+func (c *Converter) notify(ev *history.Event) {
+	c.mu.RLock()
+	snap := c.snap
+	c.mu.RUnlock()
+	if c.notifier == nil || !shouldNotify(snap, ev.Status) {
+		return
+	}
+	switch ev.Status {
+	case history.StatusDone:
+		c.notifier.Notify(notify.Options{
+			Title:     "Conversão concluída",
+			Body:      describeDone(ev),
+			Kind:      notify.KindDone,
+			ImagePath: ev.Output,
+		})
+	case history.StatusError:
+		c.notifier.Notify(notify.Options{
+			Title:     "Erro na conversão",
+			Body:      describeError(ev),
+			Kind:      notify.KindError,
+			ImagePath: ev.Source,
+		})
+	case history.StatusSkipped:
+		c.notifier.Notify(notify.Options{
+			Title:     "Arquivo ignorado",
+			Body:      describeSkipped(ev),
+			Kind:      notify.KindSkipped,
+			ImagePath: ev.Output,
+		})
+	}
+}
+
+// describeDone monta o corpo descritivo de uma conversão concluída,
+// incluindo o resultado e a economia de tamanho (ex.: "-67%").
+func describeDone(ev *history.Event) string {
+	s := ev.File
+	if ev.Output != "" {
+		s += " → " + filepath.Base(ev.Output)
+	}
+	if ev.SizeIn > 0 && ev.SizeOut > 0 {
+		s += " · " + fmtSize(ev.SizeIn) + " → " + fmtSize(ev.SizeOut)
+		if p := reductionPct(ev.SizeIn, ev.SizeOut); p != "" {
+			s += " (" + p + ")"
+		}
+	}
+	return s
+}
+
+// describeSkipped monta o corpo de um arquivo ignorado, com o motivo.
+func describeSkipped(ev *history.Event) string {
+	s := ev.File
+	if ev.Reason != "" {
+		s += " · " + ev.Reason
+	}
+	return s
+}
+
+// describeError monta o corpo de uma falha, truncando mensagens longas.
+func describeError(ev *history.Event) string {
+	s := ev.File
+	if ev.Error != "" {
+		s += " · " + ev.Error
+	}
+	return truncate(s, 140)
+}
+
+// truncate limita a string a n caracteres (runas), adicionando reticências.
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// fmtSize formata bytes de forma legível (ex.: "1,2 MB").
+func fmtSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// reductionPct retorna a variação percentual de tamanho (ex.: "-67%").
+func reductionPct(in, out int64) string {
+	if in <= 0 {
+		return ""
+	}
+	// percentual com sinal, arredondado para o inteiro mais próximo
+	diff := in - out
+	var p int64
+	if diff >= 0 {
+		p = (diff*100 + in/2) / in
+	} else {
+		p = (diff*100 - in/2) / in
+	}
+	if p > 0 {
+		return fmt.Sprintf("-%d%%", p)
+	}
+	return fmt.Sprintf("+%d%%", -p)
+}
+
+// shouldNotify decide se um evento terminal deve gerar notificação do
+// sistema, respeitando o interruptor geral e a preferência por status.
+func shouldNotify(snap Snapshot, status string) bool {
+	if !snap.NotificationsEnabled {
+		return false
+	}
+	switch status {
+	case history.StatusDone:
+		return snap.NotifyOnDone
+	case history.StatusError:
+		return snap.NotifyOnError
+	case history.StatusSkipped:
+		return snap.NotifyOnSkipped
+	}
+	return false
 }
 
 func (c *Converter) fail(ev *history.Event, err error) {

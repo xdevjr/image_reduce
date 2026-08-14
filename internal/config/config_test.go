@@ -49,3 +49,31 @@ func TestVideoDefaults(t *testing.T) {
 		t.Fatalf("preset inválido não corrigido: %d", cfg.VideoPreset)
 	}
 }
+
+func TestNotificationDefaults(t *testing.T) {
+	cfg := Default()
+	if !cfg.NotificationsEnabled {
+		t.Fatal("notificações deveriam estar habilitadas por padrão")
+	}
+	if !cfg.NotifyOnDone {
+		t.Fatal("notificação de conclusão deveria estar habilitada por padrão")
+	}
+	if !cfg.NotifyOnError {
+		t.Fatal("notificação de erro deveria estar habilitada por padrão")
+	}
+	if cfg.NotifyOnSkipped {
+		t.Fatal("notificação de arquivo ignorado deveria estar desligada por padrão")
+	}
+}
+
+func TestHasJSONKey(t *testing.T) {
+	if !hasJSONKey([]byte(`{"notifications_enabled": true}`), "notifications_enabled") {
+		t.Fatal("chave existente não foi detectada")
+	}
+	if hasJSONKey([]byte(`{"watch_dir": "/tmp"}`), "notifications_enabled") {
+		t.Fatal("chave ausente foi detectada como presente")
+	}
+	if hasJSONKey([]byte(`não é json`), "notifications_enabled") {
+		t.Fatal("JSON inválido deveria retornar false")
+	}
+}

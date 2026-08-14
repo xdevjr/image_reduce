@@ -323,3 +323,118 @@ func TestVideoInvalidFile(t *testing.T) {
 		t.Fatal("evento error não encontrado")
 	}
 }
+
+func TestShouldNotify(t *testing.T) {
+	// Interruptor geral desligado: nada notifica.
+	off := Snapshot{}
+	for _, status := range []string{history.StatusDone, history.StatusError, history.StatusSkipped} {
+		if shouldNotify(off, status) {
+			t.Errorf("shouldNotify(%q) = true com notificações desligadas", status)
+		}
+	}
+
+	// Interruptor ligado: cada status respeita sua preferência.
+	on := Snapshot{
+		NotificationsEnabled: true,
+		NotifyOnDone:         true,
+		NotifyOnError:        true,
+		NotifyOnSkipped:      false,
+	}
+	cases := []struct {
+		status string
+		want   bool
+	}{
+		{history.StatusDone, true},
+		{history.StatusError, true},
+		{history.StatusSkipped, false},
+		{history.StatusQueued, false},
+		{history.StatusConverting, false},
+	}
+	for _, c := range cases {
+		if got := shouldNotify(on, c.status); got != c.want {
+			t.Errorf("shouldNotify(%q) = %v, esperado %v", c.status, got, c.want)
+		}
+	}
+
+	// Preferências individuais desligadas.
+	doneOnly := Snapshot{NotificationsEnabled: true, NotifyOnDone: true}
+	if shouldNotify(doneOnly, history.StatusError) {
+		t.Error("shouldNotify(error) = true com NotifyOnError desligado")
+	}
+	if !shouldNotify(doneOnly, history.StatusDone) {
+		t.Error("shouldNotify(done) = false com NotifyOnDone ligado")
+	}
+}
+
+func TestDescribeDone(t *testing.T) {
+	ev := &history.Event{
+		File:    "foto.png",
+		Output:  "/tmp/out/foto.webp",
+		SizeIn:  1024 * 1024,
+		SizeOut: 340 * 1024,
+	}
+	got := describeDone(ev)
+	want := "foto.png → foto.webp · 1.0 MB → 340.0 KB (-67%)"
+	if got != want {
+		t.Fatalf("describeDone = %q, esperado %q", got, want)
+	}
+}
+
+func TestDescribeSkipped(t *testing.T) {
+	ev := &history.Event{File: "anim.gif", Reason: "animated gif"}
+	if got := describeSkipped(ev); got != "anim.gif · animated gif" {
+		t.Fatalf("describeSkipped = %q", got)
+	}
+	ev = &history.Event{File: "nota.txt"}
+	if got := describeSkipped(ev); got != "nota.txt" {
+		t.Fatalf("describeSkipped sem motivo = %q", got)
+	}
+}
+
+func TestDescribeError(t *testing.T) {
+	ev := &history.Event{File: "filme.mp4", Error: "falha na conversão de vídeo: moov atom not found"}
+	got := describeError(ev)
+	if got != "filme.mp4 · falha na conversão de vídeo: moov atom not found" {
+		t.Fatalf("describeError = %q", got)
+	}
+	// mensagem longa é truncada
+	long := &history.Event{File: "x.png", Error: string(make([]byte, 300))}
+	if got := describeError(long); len([]rune(got)) > 140 {
+		t.Fatalf("describeError não truncou: %d caracteres", len([]rune(got)))
+	}
+}
+
+func TestFmtSize(t *testing.T) {
+	cases := []struct {
+		in   int64
+		want string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1024, "1.0 KB"},
+		{340 * 1024, "340.0 KB"},
+		{1024 * 1024, "1.0 MB"},
+		{5 * 1024 * 1024 * 1024, "5.0 GB"},
+	}
+	for _, c := range cases {
+		if got := fmtSize(c.in); got != c.want {
+			t.Errorf("fmtSize(%d) = %q, esperado %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestReductionPct(t *testing.T) {
+	cases := []struct {
+		in, out int64
+		want    string
+	}{
+		{1024 * 1024, 340 * 1024, "-67%"},
+		{100, 150, "+50%"},
+		{0, 10, ""},
+	}
+	for _, c := range cases {
+		if got := reductionPct(c.in, c.out); got != c.want {
+			t.Errorf("reductionPct(%d, %d) = %q, esperado %q", c.in, c.out, got, c.want)
+		}
+	}
+}

@@ -633,7 +633,7 @@
                 d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
               />
             </svg>
-            Abrir pasta monitorada
+            Pasta Monitorada
           </button>
           <button type="button" class="action-btn" id="openOutputDir">
             <svg
@@ -650,7 +650,7 @@
                 d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
               />
             </svg>
-            Abrir pasta de saída
+            Pasta de Saída
           </button>
           <span class="spacer"></span>
           <button type="button" class="action-btn" id="toggleWatcherBtn">
@@ -801,6 +801,29 @@
               >Requer ffmpeg com encoder AV1 (libsvtav1 ou libaom-av1). Vídeos
               já em WebM são recompactados apenas se ficarem menores.</span
             >
+          </fieldset>
+          <fieldset>
+            <legend>Notificações</legend>
+            <label class="checkbox">
+              <input id="notificationsEnabled" type="checkbox" />
+              Notificações do sistema
+            </label>
+            <span class="hint"
+              >Mostra avisos na área de notificação do desktop quando arquivos
+              são processados.</span
+            >
+            <label class="checkbox">
+              <input id="notifyOnDone" type="checkbox" />
+              Ao concluir conversão
+            </label>
+            <label class="checkbox">
+              <input id="notifyOnError" type="checkbox" />
+              Ao ocorrer erro
+            </label>
+            <label class="checkbox">
+              <input id="notifyOnSkipped" type="checkbox" />
+              Ao ignorar arquivo
+            </label>
           </fieldset>
           <fieldset>
             <legend>Riscos</legend>
@@ -1025,6 +1048,10 @@
         $("videoEnabled").checked = !!cfg.video_enabled;
         $("videoCrf").value = cfg.video_crf || 32;
         $("videoPreset").value = cfg.video_preset || 6;
+        $("notificationsEnabled").checked = cfg.notifications_enabled !== false;
+        $("notifyOnDone").checked = cfg.notify_on_done !== false;
+        $("notifyOnError").checked = cfg.notify_on_error !== false;
+        $("notifyOnSkipped").checked = !!cfg.notify_on_skipped;
       }
 
       function renderStatus(cfg) {
@@ -1268,6 +1295,10 @@
           video_enabled: $("videoEnabled").checked,
           video_crf: videoCrf,
           video_preset: videoPreset,
+          notifications_enabled: $("notificationsEnabled").checked,
+          notify_on_done: $("notifyOnDone").checked,
+          notify_on_error: $("notifyOnError").checked,
+          notify_on_skipped: $("notifyOnSkipped").checked,
         };
         setSaving(true);
         try {

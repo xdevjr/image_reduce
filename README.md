@@ -177,6 +177,10 @@ Arquivo: `~/.config/image_reduce/config.json`
 | `video_enabled`  | Converter vídeos para WebM (AV1 + Opus)        | `true`                              |
 | `video_crf`      | Qualidade do AV1 (1–63, menor = melhor)         | `32`                                |
 | `video_preset`   | Velocidade do encoder (0–13)                    | `6`                                 |
+| `notifications_enabled` | Notificações do sistema (D-Bus)          | `true`                              |
+| `notify_on_done` | Notificar ao concluir conversão                  | `true`                              |
+| `notify_on_error`| Notificar ao ocorrer erro                        | `true`                              |
+| `notify_on_skipped` | Notificar ao ignorar arquivo                 | `false`                             |
 
 A configuração também pode ser editada pela janela do app (aba
 "Configurações"). Alterações são aplicadas em tempo real.
